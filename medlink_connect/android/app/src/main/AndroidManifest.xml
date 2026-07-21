@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for TCP connectivity tests in network diagnostics -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="medlink_connect"
         android:name="${applicationName}"

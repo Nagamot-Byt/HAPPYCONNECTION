@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=MedLink Connect (RDP Handler)
+Comment=Handles rdp:// and ms-rd-web:// URI schemes for hospital RDP access
+Exec=/usr/bin/medlink_connect %u
+Terminal=false
+NoDisplay=true
+MimeType=x-scheme-handler/rdp;x-scheme-handler/ms-rd-web;
+Categories=Network;RemoteAccess;
+StartupNotify=false

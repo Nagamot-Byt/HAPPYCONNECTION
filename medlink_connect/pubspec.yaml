@@ -44,6 +44,9 @@ dependencies:
   # Running shell commands on desktop platforms.
   process_run: ^1.2.0
 
+  # Persistent key-value storage for settings and profiles.
+  shared_preferences: ^2.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -64,13 +64,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Step 4 – Launch RDP
       setState(() => _status = 'Launching RDP client…');
-      final launched = await widget.rdpLauncher.launchRdp(
+      final result = await widget.rdpLauncher.launchRdp(
         address: '10.0.0.100',
         username: '',
       );
 
       setState(() {
-        _status = launched ? '✅ Connected' : '⚠ RDP client not found';
+        _status = result.message;
         _isBusy = false;
       });
     } catch (e) {

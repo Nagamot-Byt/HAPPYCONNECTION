@@ -196,10 +196,17 @@ class _HomeScreenState extends State<HomeScreen> {
         foregroundColor: theme.colorScheme.onPrimary,
         actions: [
           IconButton(
+            icon: const Icon(Icons.settings_ethernet),
+            tooltip: 'Perfiles',
+            onPressed: () {
+              Navigator.of(context).pushNamed('/profiles');
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.settings),
             tooltip: 'Configuración',
             onPressed: () {
-              // Placeholder — no action yet
+              Navigator.of(context).pushNamed('/settings');
             },
           ),
         ],

@@ -1,0 +1,30 @@
+Flutter test results — medlink_connect
+Run: flutter test --reporter expanded
+Date: 2026-07-24
+
+NOTE: Flutter SDK is present at /home/agent-lead/flutter/ but the binary
+(flutter) was not found in bin/. The SDK appears partially installed (cache
+with artifacts present but no flutter shell script). Tests could not be
+executed automatically.
+
+=== Static code review of test/widget_test.dart ===
+
+Test: "App renders MedLink Connect shell"
+  Expected: find.text('MedLink Connect') — PASS (app bar title matches)
+  Expected: find.text('Connect') — FAIL
+  Reason: HomeScreen uses Spanish text 'Conectar' for the button label,
+          not 'Connect'. The widget test was written before the Spanish
+          localization was applied.
+
+ANTICIPATED RESULT (if Flutter were runnable):
+  Total: 1
+  Passed: 0
+  Failed: 1
+
+Additional notes:
+- test/health_check/ — directory exists but is empty (no test files)
+- test/rdp_launcher/ — directory exists but is empty (no test files)
+- test/split_tunnel/ — directory exists but is empty (no test files)
+- No integration tests or unit tests exist for the core interfaces
+  (NetworkDiagnostics, RouteManager, RdpLauncher) or their default
+  implementations.

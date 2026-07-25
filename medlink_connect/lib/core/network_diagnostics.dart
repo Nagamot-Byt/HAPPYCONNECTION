@@ -1,18 +1,23 @@
-/// Abstract interface for OS-level network diagnostics.
+/// Abstract interface for network diagnostic operations.
 ///
-/// Each platform provides its own implementation via a platform channel.
-/// This interface exposes the operations the UI layer needs — never the
-/// underlying shell commands or platform APIs directly.
+/// Platform implementations use method channels
+/// (`com.medlinkconnect/network_diagnostics`) to invoke native code.
 abstract class NetworkDiagnostics {
-  /// Flush the DNS cache on the current platform.
+  /// Flushes the DNS resolver cache.
   ///
-  /// Returns `true` if the flush succeeded (or was a no-op), `false` on error.
-  Future<bool> flushDns();
+  /// Returns a message describing the result. On Linux this runs
+  /// `resolvectl flush-caches` with appropriate fallbacks.
+  Future<String> flushDns();
 
-  /// Clear system network caches (ARP, routing table cache, etc.).
-  Future<bool> clearNetworkCaches();
+  /// Clears all local network caches (ARP, neighbour tables, etc.).
+  ///
+  /// May require administrator / root privileges.
+  Future<String> clearNetworkCaches();
 
-  /// Ping [host] (default: 8.8.8.8) and return the round-trip latency
-  /// in milliseconds, or `null` if the host is unreachable.
+  /// Pings [host] and returns the average round-trip time in milliseconds,
+  /// or `null` if the host is unreachable.
+  ///
+  /// The default implementation pings 4 times with a 2-second timeout
+  /// per probe (matching `ping -c 4 -W 2`).
   Future<int?> ping(String host);
 }

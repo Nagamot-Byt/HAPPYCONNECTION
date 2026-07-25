@@ -1,25 +1,16 @@
-/// Abstract interface for launching an RDP session via deep linking.
+/// Abstract interface for launching RDP connections.
 ///
-/// We never embed an RDP viewer — we always delegate to Microsoft's
-/// official Remote Desktop client (or a compatible third-party client)
-/// using the `rdp://` or `ms-rd-web://` URI scheme.
+/// Platform implementations use method channels
+/// (`com.medlinkconnect/rdp_launcher`) to invoke native code.
 abstract class RdpLauncher {
-  /// Launch the Microsoft Remote Desktop client (or equivalent) with the
-  /// given connection parameters.
+  /// Prepares the environment for an RDP launch.
   ///
-  /// [address] — target hostname or IP
-  /// [port] — RDP port (default 3389)
-  /// [username] — optional pre-filled username
-  /// [fullAddress] — full `rdp://fullAddress` URI to pass verbatim
-  ///
-  /// Returns `true` if a compatible client was found and launched.
-  Future<bool> launchRdp({
-    String? address,
-    int port = 3389,
-    String? username,
-    String? fullAddress,
-  });
+  /// On Linux this verifies that `xdg-open` is available and that an
+  /// `rdp://` (or `ms-rd-web://`) scheme handler is registered.
+  /// Returns `true` when the pre-flight checks pass.
+  Future<bool> preLaunch();
 
-  /// Check whether an RDP client is installed on this device.
+  /// Returns `true` when an RDP client (Remmina, FreeRDP, or Microsoft
+  /// Remote Desktop) is available on the system.
   Future<bool> isRdpClientAvailable();
 }

@@ -1,36 +1,34 @@
-/// Abstract interface for managing network routes.
+/// Abstract interface for managing static IP routes and split-tunneling.
 ///
-/// On desktop platforms (Windows, macOS, Linux) this manipulates the
-/// system routing table directly.  On mobile (iOS, Android) we configure
-/// a per-app VPN / split-tunnel profile so only hospital-bound traffic
-/// travels through the segregated WiFi while all other traffic remains on
-/// the device's primary internet connection.
+/// Platform implementations use method channels
+/// (`com.medlinkconnect/route_manager`) to invoke native code.
 abstract class RouteManager {
-  /// Add a static route so traffic destined for [destinationCidr] is
-  /// routed through [gateway] on interface [interfaceName].
-  ///
-  /// Returns `true` on success.
-  Future<bool> addRoute({
+  /// Adds a static route: `ip route add <destinationCidr> via <gateway> dev <interfaceName>`.
+  Future<String> addRoute({
     required String destinationCidr,
     required String gateway,
     required String interfaceName,
   });
 
-  /// Remove a previously-added route.
-  Future<bool> removeRoute({
-    required String destinationCidr,
-  });
+  /// Removes a previously added route.
+  Future<String> removeRoute({required String destinationCidr});
 
-  /// Enable split-tunneling for the hospital network.
-  ///
-  /// On mobile this provisions a VPN profile; on desktop this sets up
-  /// policy-based routing rules.
-  Future<bool> enableSplitTunnel({
+  /// Enables split-tunneling by adding one route for every subnet in
+  /// [hospitalSubnets]. If any route fails, all previously added routes
+  /// are rolled back.
+  Future<String> enableSplitTunnel({
     required List<String> hospitalSubnets,
-    required String hospitalGateway,
-    required String hospitalInterface,
+    required String gateway,
+    required String interfaceName,
   });
 
-  /// Disable split-tunneling and restore normal routing.
-  Future<bool> disableSplitTunnel();
+  /// Disables split-tunneling by removing every route that was added
+  /// by [enableSplitTunnel].
+  Future<String> disableSplitTunnel();
+
+  /// Returns the raw output of `ip route show`.
+  Future<String> getRoutes();
+
+  /// Returns a list of available network interface names.
+  Future<List<String>> listInterfaces();
 }

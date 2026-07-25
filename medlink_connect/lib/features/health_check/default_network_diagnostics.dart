@@ -1,38 +1,31 @@
 import 'package:flutter/services.dart';
 import 'package:medlink_connect/core/network_diagnostics.dart';
 
-/// Default [NetworkDiagnostics] implementation that delegates to the host
-/// platform via a method channel.
-///
-/// Channel: `com.medlinkconnect/network_diagnostics`
-///
-/// Platform implementors must handle:
-/// - `flushDns` → Windows: `ipconfig /flushdns`, macOS: `sudo dscacheutil …`,
-///   Linux: `systemd-resolve --flush-caches`
-/// - `clearNetworkCaches` → combined cache-clear sequence
-/// - `ping` → return ms or null
+/// Default [NetworkDiagnostics] implementation that communicates with the
+/// native platform via the `com.medlinkconnect/network_diagnostics` method
+/// channel.
 class DefaultNetworkDiagnostics implements NetworkDiagnostics {
-  static const _channel = MethodChannel(
-    'com.medlinkconnect/network_diagnostics',
-  );
+  static const _channel =
+      MethodChannel('com.medlinkconnect/network_diagnostics');
 
   @override
-  Future<bool> flushDns() async {
+  Future<String> flushDns() async {
     try {
-      final result = await _channel.invokeMethod<bool>('flushDns');
-      return result ?? false;
-    } on PlatformException {
-      return false;
+      final result = await _channel.invokeMethod<String>('flushDns');
+      return result ?? 'DNS cache flushed successfully.';
+    } on PlatformException catch (e) {
+      return 'Error flushing DNS: ${e.message}';
     }
   }
 
   @override
-  Future<bool> clearNetworkCaches() async {
+  Future<String> clearNetworkCaches() async {
     try {
-      final result = await _channel.invokeMethod<bool>('clearNetworkCaches');
-      return result ?? false;
-    } on PlatformException {
-      return false;
+      final result =
+          await _channel.invokeMethod<String>('clearNetworkCaches');
+      return result ?? 'Network caches cleared successfully.';
+    } on PlatformException catch (e) {
+      return 'Error clearing network caches: ${e.message}';
     }
   }
 
@@ -42,7 +35,7 @@ class DefaultNetworkDiagnostics implements NetworkDiagnostics {
       final result = await _channel.invokeMethod<int>('ping', {'host': host});
       return result;
     } on PlatformException {
-      return null;
+      return null; // host unreachable
     }
   }
 }

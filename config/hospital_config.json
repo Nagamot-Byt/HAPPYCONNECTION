@@ -1,33 +1,106 @@
 {
   "hospital": {
-    "name": "Hospital Ejemplo",
-    "code": "HOSP-001"
+    "name": "Hospital Universitario del Valle - HUV",
+    "code": "HUV-001",
+    "region": "Cali, Colombia",
+    "country": "CO"
   },
+  "servers": [
+    {
+      "name": "Servidor Pediátrico",
+      "code": "SERV_PEDIATRICO",
+      "address": "serv_pediatrico.huv.gov.co",
+      "port": 3389,
+      "protocol": "RDP",
+      "department": "Pediatría",
+      "description": "Acceso a Historia Clínica Pediátrica",
+      "enabled": true,
+      "icon": "👶"
+    },
+    {
+      "name": "Servidor Ginecológico",
+      "code": "SERV_GINECOLOGICO",
+      "address": "serv_ginecologico.huv.gov.co",
+      "port": 3389,
+      "protocol": "RDP",
+      "department": "Ginecología",
+      "description": "Acceso a Historia Clínica Ginecológica",
+      "enabled": true,
+      "icon": "👩‍⚕️"
+    },
+    {
+      "name": "Servidor Móviles",
+      "code": "SERV_MOVILES",
+      "address": "serv_moviles.huv.gov.co",
+      "port": 3389,
+      "protocol": "RDP",
+      "department": "Movilidad",
+      "description": "Acceso remoto desde dispositivos móviles",
+      "enabled": true,
+      "icon": "📱"
+    },
+    {
+      "name": "Servidor Urgencias",
+      "code": "SERV_URGENCIAS",
+      "address": "serv_urgencias.huv.gov.co",
+      "port": 3389,
+      "protocol": "RDP",
+      "department": "Urgencias",
+      "description": "Acceso prioritario a Urgencias y Emergencias",
+      "enabled": true,
+      "icon": "🚑",
+      "priority": true
+    },
+    {
+      "name": "Servidor Consulta Externa",
+      "code": "SERV_CONST_EXT",
+      "address": "serv_const_ext.huv.gov.co",
+      "port": 3389,
+      "protocol": "RDP",
+      "department": "Consulta Externa",
+      "description": "Acceso a Historia Clínica Consulta Externa",
+      "enabled": true,
+      "icon": "🏥"
+    }
+  ],
   "network": {
     "his_interface": "eth0",
     "wifi_interface": "wlan0",
     "his_gateway": "10.0.0.1",
     "his_subnet": "10.0.0.0/24",
-    "wifi_gateway": "192.168.1.1"
-  },
-  "rdp": {
-    "server": "rdp.hospital.local",
-    "port": 3389,
-    "username": "",
-    "domain": "HOSPITAL",
-    "resolution": "1920x1080",
-    "color_depth": 32
+    "wifi_gateway": "192.168.1.1",
+    "vpn_enabled": false,
+    "network_isolation": true
   },
   "security": {
     "tls_version": "1.3",
-    "cipher_suites": ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"],
+    "cipher_suites": [
+      "TLS_AES_256_GCM_SHA384",
+      "TLS_CHACHA20_POLY1305_SHA256"
+    ],
     "certificate_pinning": true,
-    "require_vpn": false
+    "require_vpn": false,
+    "session_timeout": 3600,
+    "idle_timeout": 900
   },
   "monitoring": {
     "heartbeat_interval_seconds": 5,
     "max_reconnection_attempts": 5,
     "reconnection_backoff_multiplier": 2,
-    "log_level": "INFO"
+    "log_level": "INFO",
+    "enable_audit_log": true,
+    "audit_log_retention_days": 90
+  },
+  "ui": {
+    "theme": "dark",
+    "primary_color": "#1a1a1a",
+    "accent_color": "#00ff00",
+    "language": "es-CO",
+    "show_department_icons": true
+  },
+  "updates": {
+    "auto_update": true,
+    "update_channel": "stable",
+    "check_interval_hours": 24
   }
 }

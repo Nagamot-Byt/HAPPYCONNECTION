@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/connection_provider.dart';
+import '../models/server.dart';
+import '../widgets/server_list.dart';
 import '../widgets/network_status_widget.dart';
 import '../widgets/connection_controls.dart';
 import '../widgets/activity_log.dart';
@@ -26,7 +28,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          '🏥 HAPPYCONNECTION',
+          '🏥 HAPPYCONNECTION - HUV',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -57,13 +59,50 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Encabezado con logo del hospital
+            Card(
+              color: Colors.grey[900],
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    const Text(
+                      '🏢',
+                      style: TextStyle(fontSize: 40),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Hospital Universitario del Valle',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const Text(
+                      'Cali, Colombia',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Estado de redes
             const NetworkStatusWidget(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+
+            // Lista de servidores disponibles
+            const ServerListWidget(),
+            const SizedBox(height: 16),
 
             // Controles
             const ConnectionControls(),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
             // Log de actividad
             const ActivityLog(),

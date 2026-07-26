@@ -1,0 +1,33 @@
+{
+  "hospital": {
+    "name": "Hospital Ejemplo",
+    "code": "HOSP-001"
+  },
+  "network": {
+    "his_interface": "eth0",
+    "wifi_interface": "wlan0",
+    "his_gateway": "10.0.0.1",
+    "his_subnet": "10.0.0.0/24",
+    "wifi_gateway": "192.168.1.1"
+  },
+  "rdp": {
+    "server": "rdp.hospital.local",
+    "port": 3389,
+    "username": "",
+    "domain": "HOSPITAL",
+    "resolution": "1920x1080",
+    "color_depth": 32
+  },
+  "security": {
+    "tls_version": "1.3",
+    "cipher_suites": ["TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"],
+    "certificate_pinning": true,
+    "require_vpn": false
+  },
+  "monitoring": {
+    "heartbeat_interval_seconds": 5,
+    "max_reconnection_attempts": 5,
+    "reconnection_backoff_multiplier": 2,
+    "log_level": "INFO"
+  }
+}

@@ -1,0 +1,40 @@
+# Binaries
+*.exe
+*.app
+*.bin
+*.so
+*.dylib
+
+# Directories
+/build/
+/dist/
+/.dart_tool/
+/node_modules/
+/vendor/
+/.flutter-plugins/
+
+# Go
+*.o
+*.a
+*.so
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+*.key
+*.pem
+
+# Logs
+*.log
+logs/

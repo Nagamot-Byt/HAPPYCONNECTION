@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=MedLink Connect
+Comment=Hospital RDP Connection Manager
+Exec=medlink_connect
+Icon=medlink_connect
+Terminal=false
+Categories=Network;Utility;
+Keywords=rdp;remote;hospital;network;
+
+# Deep linking support
+MimeType=x-scheme-handler/rdp;x-scheme-handler/ms-rd-web;

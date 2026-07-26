@@ -1,159 +1,105 @@
-import Cocoa
 import FlutterMacOS
+import Network
+import Darwin
 
-/// macOS implementation of the `com.medlinkconnect/network_diagnostics`
-/// method channel.
-///
-/// Provides DNS flush, ARP cache clearing, and ICMP ping via native
-/// shell commands (`dscacheutil`, `killall`, `arp`, `ping`).
 public class NetworkDiagnosticsPlugin: NSObject, FlutterPlugin {
-
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: "com.medlinkconnect/network_diagnostics",
-      binaryMessenger: registrar.messenger)
+      binaryMessenger: registrar.messenger())
     let instance = NetworkDiagnosticsPlugin()
     registrar.addMethodCallDelegate(instance, channel: channel)
   }
 
-  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+  public func dummyMethodToEnforceBundling() {
+    // Enforce bundling
+  }
+
+  public func methodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
     case "flushDns":
-      handleFlushDns(result: result)
-
+      flushDns(result: result)
     case "clearNetworkCaches":
-      handleClearCaches(result: result)
-
+      clearNetworkCaches(result: result)
     case "ping":
-      handlePing(call: call, result: result)
-
+      if let args = call.arguments as? [String: Any],
+         let host = args["host"] as? String {
+        ping(host: host, result: result)
+      } else {
+        result(FlutterError(code: "invalid_args", message: "Missing host", details: nil))
+      }
     default:
       result(FlutterMethodNotImplemented)
     }
   }
 
-  // MARK: - DNS Flush
-
-  private func handleFlushDns(result: @escaping FlutterResult) {
-    // Requires elevated privileges: sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
-    guard isElevated() else {
-      result(FlutterError(
-        code: "elevation_required",
-        message: "Elevation required: DNS flush needs root privileges. Run with sudo.",
-        details: nil))
-      return
+  private func flushDns(result: @escaping FlutterResult) {
+    // macOS DNS flush via mDNSResponder
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/dscacheutil")
+    process.arguments = ["-flushcache"]
+    do {
+      try process.run()
+      process.waitUntilExit()
+      result(process.terminationStatus == 0)
+    } catch {
+      result(false)
     }
+  }
 
-    // Run both commands
-    let (out1, code1) = runCommand("dscacheutil -flushcache 2>&1")
-    let (out2, code2) = runCommand("killall -HUP mDNSResponder 2>&1")
+  private func clearNetworkCaches(result: @escaping FlutterResult) {
+    // Clear ARP cache
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/sbin/arp")
+    process.arguments = ["-ad"]
+    do {
+      try process.run()
+      process.waitUntilExit()
+      result(process.terminationStatus == 0)
+    } catch {
+      result(false)
+    }
+  }
 
-    if code1 != 0 && code2 != 0 {
-      // Both failed — report the error
-      let errorMsg = [out1, out2].filter { !$0.isEmpty }.joined(separator: "; ")
-      if errorMsg.isEmpty {
-        result(false)
+  private func ping(host: String, result: @escaping FlutterResult) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/sbin/ping")
+    process.arguments = ["-c", "4", "-W", "2000", host]
+
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+
+    do {
+      try process.run()
+      process.waitUntilExit()
+
+      let data = pipe.fileHandleForReading.readDataToEndOfFile()
+      if let output = String(data: data, encoding: .utf8) {
+        if let avgRtt = parseAverageRtt(from: output) {
+          result(avgRtt)
+        } else {
+          result(-1)
+        }
       } else {
-        NSLog("[NetworkDiagnosticsPlugin] DNS flush failed: \(errorMsg)")
-        result(false)
+        result(-1)
       }
-    } else {
-      result(true)
+    } catch {
+      result(-1)
     }
   }
 
-  // MARK: - Cache Clear
-
-  private func handleClearCaches(result: @escaping FlutterResult) {
-    guard isElevated() else {
-      result(FlutterError(
-        code: "elevation_required",
-        message: "Elevation required: ARP cache clear needs root privileges. Run with sudo.",
-        details: nil))
-      return
-    }
-
-    let (output, exitCode) = runCommand("arp -ad 2>&1")
-    if exitCode != 0 && !output.isEmpty {
-      NSLog("[NetworkDiagnosticsPlugin] ARP cache clear warning: \(output)")
-    }
-    // arp -ad often returns non-zero even when successful, so always return true
-    // if elevation is available
-    result(true)
-  }
-
-  // MARK: - Ping
-
-  private func handlePing(call: FlutterMethodCall, result: @escaping FlutterResult) {
-    guard let args = call.arguments as? [String: Any] else {
-      result(FlutterError(code: "bad_arguments",
-                          message: "Expected a map with 'host', 'count', 'timeoutMs'.",
-                          details: nil))
-      return
-    }
-
-    let host = args["host"] as? String ?? "8.8.8.8"
-    let count = args["count"] as? Int ?? 4
-    let timeoutSec = max(1, (args["timeoutMs"] as? Int ?? 2000) / 1000)
-
-    // macOS: ping -c {count} -W {timeout_sec} {host}
-    let command = "ping -c \(count) -W \(timeoutSec) \(host) 2>&1"
-    let (output, exitCode) = runCommand(command)
-
-    if exitCode != 0 {
-      // Host unreachable or ping failed — return null
-      result(nil)
-      return
-    }
-
-    // Parse: "round-trip min/avg/max/stddev = X/Y/Z/W ms"
-    let pattern = #"min/avg/max/(?:mdev|stddev)\s*=\s*([\d.]+)/([\d.]+)/([\d.]+)/([\d.]+)\s*ms"#
-    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
-      result(nil)
-      return
-    }
-
-    let range = NSRange(output.startIndex..<output.endIndex, in: output)
-    if let match = regex.firstMatch(in: output, options: [], range: range) {
-      let avgRange = match.range(at: 2)  // group 2 = avg
-      if avgRange.location != NSNotFound,
-         let avgStr = Range(avgRange, in: output) {
-        let avgVal = Double(output[avgStr])
-        if let avg = avgVal {
-          result(Int(avg.rounded()))
-          return
+  private func parseAverageRtt(from output: String) -> Int? {
+    let pattern = "rtt min/avg/max/stddev = [0-9.]+/([0-9.]+)/[0-9.]+/[0-9.]+"
+    if let regex = try? NSRegularExpression(pattern: pattern) {
+      let range = NSRange(output.startIndex..<output.endIndex, in: output)
+      if let match = regex.firstMatch(in: output, range: range),
+         let matchRange = Range(match.range(at: 1), in: output) {
+        if let avg = Double(String(output[matchRange])) {
+          return Int(avg.rounded())
         }
       }
     }
-
-    result(nil)
-  }
-
-  // MARK: - Helpers
-
-  private func runCommand(_ command: String) -> (output: String, exitCode: Int32) {
-    let task = Process()
-    task.launchPath = "/bin/bash"
-    task.arguments = ["-c", command]
-
-    let pipe = Pipe()
-    task.standardOutput = pipe
-    task.standardError = pipe
-
-    do {
-      try task.run()
-    } catch {
-      return ("Failed to launch process: \(error.localizedDescription)", -1)
-    }
-
-    task.waitUntilExit()
-
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    return (output, task.terminationStatus)
-  }
-
-  private func isElevated() -> Bool {
-    return getuid() == 0
+    return nil
   }
 }

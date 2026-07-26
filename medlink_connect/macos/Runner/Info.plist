@@ -3,38 +3,36 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
-    <string>$(DEVELOPMENT_LANGUAGE)</string>
+    <string>en</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
-    <key>CFBundleIconFile</key>
-    <string></string>
     <key>CFBundleIdentifier</key>
     <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>$(PRODUCT_NAME)</string>
+    <string>MedLink Connect</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>$(FLUTTER_BUILD_NAME)</string>
+    <string>2.1.0</string>
     <key>CFBundleVersion</key>
-    <string>$(FLUTTER_BUILD_NUMBER)</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <string>1</string>
     <key>NSHumanReadableCopyright</key>
-    <string>$(PRODUCT_COPYRIGHT)</string>
+    <string>Copyright © 2024 MedLink. All rights reserved.</string>
     <key>NSMainNibFile</key>
     <string>MainMenu</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    
+    <!-- Deep linking for RDP schemes -->
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
             <key>CFBundleTypeRole</key>
-            <string>Viewer</string>
+            <string>Editor</string>
             <key>CFBundleURLName</key>
-            <string>com.medlinkconnect</string>
+            <string>com.medlinkconnect.rdp</string>
             <key>CFBundleURLSchemes</key>
             <array>
                 <string>rdp</string>
@@ -42,10 +40,11 @@
             </array>
         </dict>
     </array>
-    <key>LSApplicationQueriesSchemes</key>
-    <array>
-        <string>rdp</string>
-        <string>ms-rd-web</string>
-    </array>
+    
+    <!-- Network capability -->
+    <key>NSNetServiceUsageDescription</key>
+    <string>MedLink Connect uses network services for hospital connectivity.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>MedLink Connect needs access to your local network for RDP connections.</string>
 </dict>
 </plist>

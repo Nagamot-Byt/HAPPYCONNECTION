@@ -7,7 +7,7 @@ on:
 
 jobs:
   macos:
-    runs-on: macos-latest
+    runs-on: macos-13
     defaults:
       run:
         working-directory: medlink_connect
@@ -17,9 +17,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -36,8 +33,7 @@ jobs:
       - name: Install macOS pods
         run: |
           cd macos
-          pod repo update
-          pod install --repo-update || pod install
+          pod install || true
 
       - name: Build macOS release
         run: flutter build macos --release
@@ -66,7 +62,7 @@ jobs:
           if-no-files-found: error
 
   ios-simulator:
-    runs-on: macos-latest
+    runs-on: macos-13
     defaults:
       run:
         working-directory: medlink_connect
@@ -76,9 +72,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -95,8 +88,7 @@ jobs:
       - name: Install iOS pods
         run: |
           cd ios
-          pod repo update
-          pod install --repo-update || pod install
+          pod install || true
 
       - name: Build iOS for Simulator (no codesign)
         run: flutter build ios --simulator --debug --no-codesign
@@ -105,6 +97,9 @@ jobs:
         run: |
           xcrun simctl shutdown all || true
           UDID=$(xcrun simctl list devices available | grep -m 1 "iPhone" | grep -oE '[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}')
+          if [ -z "$UDID" ]; then
+            UDID=$(xcrun simctl list devices | grep -m 1 "iPhone" | grep -oE '[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}')
+          fi
           echo "Using simulator UDID: $UDID"
           xcrun simctl boot "$UDID" 2>&1 || true
           sleep 30

@@ -1,0 +1,91 @@
+name: Build & Run Apple (macOS + iOS Simulator)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, main ]
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: medlink_connect
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Build macOS release
+        run: flutter build macos --release
+
+      - name: Validate macOS executable
+        run: |
+          APP="build/macos/Build/Products/Release/medlink_connect.app"
+          echo "App: $APP"
+          "$APP/Contents/MacOS/medlink_connect" &
+          PID=$!
+          sleep 10
+          kill $PID 2>/dev/null || true
+          echo "macOS executable validated."
+
+      - name: Upload macOS .app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: medlink_connect-macos
+          path: medlink_connect/build/macos/Build/Products/Release/medlink_connect.app
+          if-no-files-found: error
+
+  ios-simulator:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: medlink_connect
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Enable iOS
+        run: flutter config --enable-ios
+
+      - name: Build iOS for Simulator (no codesign)
+        run: flutter build ios --simulator --debug --no-codesign
+
+      - name: Boot iOS Simulator and run app
+        run: |
+          xcrun simctl shutdown all || true
+          UDID=$(xcrun simctl list devices available | grep -m 1 "iPhone" | grep -oE '[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}')
+          echo "Using simulator UDID: $UDID"
+          xcrun simctl boot "$UDID" || true
+          sleep 20
+          xcrun simctl install "$UDID" build/ios/iphonesimulator/Runner.app
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" build/ios/iphonesimulator/Runner.app/Info.plist)
+          echo "Launching $BUNDLE_ID"
+          xcrun simctl launch "$UDID" "$BUNDLE_ID"
+          sleep 15

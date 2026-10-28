@@ -18,6 +18,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -29,6 +32,12 @@ jobs:
 
       - name: Enable macOS desktop
         run: flutter config --enable-macos-desktop
+
+      - name: Install macOS pods
+        run: |
+          cd macos
+          pod repo update
+          pod install --repo-update || pod install
 
       - name: Build macOS release
         run: flutter build macos --release
@@ -45,7 +54,7 @@ jobs:
             echo "macOS executable validated."
           else
             echo "App not found at $APP"
-            find build -name "*.app" 2>&1 | head -10
+            find build -name "*.app" | head -15
             exit 1
           fi
 
@@ -68,6 +77,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -80,20 +92,23 @@ jobs:
       - name: Enable iOS
         run: flutter config --enable-ios
 
+      - name: Install iOS pods
+        run: |
+          cd ios
+          pod repo update
+          pod install --repo-update || pod install
+
       - name: Build iOS for Simulator (no codesign)
         run: flutter build ios --simulator --debug --no-codesign
 
       - name: Boot iOS Simulator and run app
         run: |
           xcrun simctl shutdown all || true
-          UDID=$(xcrun simctl list devices | grep -m 1 "Booted\|iPhone" | grep -oE '[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}' | head -1)
-          if [ -z "$UDID" ]; then
-            UDID=$(xcrun simctl list devices available | grep -m 1 "iPhone" | grep -oE '[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}')
-          fi
+          UDID=$(xcrun simctl list devices available | grep -m 1 "iPhone" | grep -oE '[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}')
           echo "Using simulator UDID: $UDID"
           xcrun simctl boot "$UDID" 2>&1 || true
-          sleep 25
-          xcrun simctl install "$UDID" build/ios/iphonesimulator/Runner.app
+          sleep 30
+          xcrun simctl install "$UDID" build/ios/iphonesimulator/Runner.app 2>&1
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" build/ios/iphonesimulator/Runner.app/Info.plist 2>&1)
           echo "Launching $BUNDLE_ID"
           xcrun simctl launch "$UDID" "$BUNDLE_ID" 2>&1 || true

@@ -1,0 +1,41 @@
+# Flutter/Dart/Pub
+.dart_tool/
+.buildlog/
+.history
+.packages
+.pub-cache/
+.pub/
+build/
+flutter_*.png
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Debug / local
+.dbg/
+*.log
+
+# Distribución (no subir binarios pesados)
+dist/*/bundle/
+dist/**/*.deb
+dist/**/*.tar.gz
+dist/**/*.dmg
+dist/**/*.pkg
+dist/**/*.exe
+dist/**/*.msi
+dist/**/*.app
+dist/**/*.zip
+
+# Mantener solo scripts/guías de distribución
+!dist/**/README*.txt
+!dist/**/instalar*.*
+!dist/**/build_installer*.*
+!dist/**/crear_dmg*.*
+!dist/**/empacar*.*
+!dist/**/LEEME*.txt
+!dist/README_INSTALADORES.md
+!dist/Windows/MedLinkConnect_Windows_Scripts.zip

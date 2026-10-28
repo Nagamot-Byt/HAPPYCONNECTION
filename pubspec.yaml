@@ -1,0 +1,32 @@
+name: medlink_connect
+description: "Cross-platform network facilitator for hospital RDP access."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: '>=3.19.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  shared_preferences: ^2.3.2
+  provider: ^6.1.2
+  get_it: ^7.7.0
+  injectable: ^2.4.0
+  intl: ^0.19.0
+  flutter_secure_storage: ^9.2.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  mocktail: ^1.0.3
+  build_runner: ^2.4.9
+  injectable_generator: ^2.6.0
+
+flutter:
+  uses-material-design: true
+  generate: true

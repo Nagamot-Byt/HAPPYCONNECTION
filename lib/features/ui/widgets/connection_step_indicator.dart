@@ -1,0 +1,64 @@
+import 'package:flutter/material.dart';
+import 'package:medlink_connect/features/ui/home_controller.dart';
+
+class ConnectionStepIndicator extends StatelessWidget {
+  final HomeController controller;
+
+  const ConnectionStepIndicator({super.key, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    const steps = [
+      ConnectionStep.diagnostics,
+      ConnectionStep.splitTunnel,
+      ConnectionStep.preLaunch,
+      ConnectionStep.launchRdp,
+    ];
+    const labels = [
+      'Preparar',
+      'Túnel',
+      'Verificar',
+      'Abrir RDP',
+    ];
+
+    final currentIdx = steps.indexOf(controller.step);
+    return Row(
+      children: List.generate(steps.length, (i) {
+        final s = steps[i];
+        final active = controller.step == s;
+        final done = controller.step == ConnectionStep.done ||
+            (currentIdx != -1 && i < currentIdx);
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: Column(
+              children: [
+                Container(
+                  height: 8,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    color: done
+                        ? Colors.green
+                        : active
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey.shade300,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  labels[i],
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: active || done ? Colors.white : Colors.grey,
+                        fontWeight:
+                            active ? FontWeight.bold : FontWeight.normal,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}

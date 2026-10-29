@@ -49,6 +49,7 @@ void main() {
     when(() => mockSettingsStorage.rdpUsername).thenReturn('');
     when(() => mockSettingsStorage.rdpDomain).thenReturn('');
     when(() => mockSettingsStorage.rdpProfile).thenReturn('adaptive');
+    when(() => mockSettingsStorage.preferMostStableServer).thenReturn(false);
     when(() => mockSettingsStorage.wifiSsid).thenReturn('');
 
     controller = HomeController(
@@ -86,7 +87,7 @@ void main() {
     });
 
     test('applyServerPreset should update RDP fields', () {
-      final preset = ServerPreset(
+      const preset = ServerPreset(
         id: 'test',
         label: 'Test Server',
         host: '10.0.0.1',
@@ -98,6 +99,118 @@ void main() {
       expect(controller.rdpHostCtrl.text, equals('10.0.0.1'));
       expect(controller.rdpPortCtrl.text, equals('3389'));
       expect(controller.selectedServerPresetId, equals('test'));
+    });
+
+    test('diagnoseBestServerPreset chooses the lowest measured latency',
+        () async {
+      controller.serverPresets = const [
+        ServerPreset(
+          id: 'slow',
+          label: 'Slow',
+          host: '10.0.0.1',
+          port: 3389,
+        ),
+        ServerPreset(
+          id: 'fast',
+          label: 'Fast',
+          host: '10.0.0.2',
+          port: 3389,
+        ),
+      ];
+      when(() => mockNetworkDiagnostics.checkTcpPort('10.0.0.1', 3389))
+          .thenAnswer((_) async => 120);
+      when(() => mockNetworkDiagnostics.checkTcpPort('10.0.0.2', 3389))
+          .thenAnswer((_) async => 25);
+
+      final best = await controller.diagnoseBestServerPreset();
+
+      expect(best?.id, 'fast');
+      expect(controller.rdpHostCtrl.text, '10.0.0.2');
+      expect(controller.selectedServerPresetId, 'fast');
+    });
+
+    test('init removes routes left by a previous session', () async {
+      when(() => mockSettingsStorage.pendingSplitTunnelCleanup).thenReturn(
+        const PendingSplitTunnelCleanup(
+          subnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        ),
+      );
+      when(() => mockRouteManager.removeRoute(
+            destinationCidr: '10.0.0.0/8',
+            gateway: '192.168.1.1',
+            interfaceName: 'Wi-Fi',
+          )).thenAnswer((_) async => 'Ruta eliminada.');
+      when(() => mockSettingsStorage.clearPendingSplitTunnelCleanup())
+          .thenAnswer((_) async {});
+
+      await controller.init();
+
+      verify(() => mockRouteManager.removeRoute(
+            destinationCidr: '10.0.0.0/8',
+            gateway: '192.168.1.1',
+            interfaceName: 'Wi-Fi',
+          )).called(1);
+      verify(() => mockSettingsStorage.clearPendingSplitTunnelCleanup())
+          .called(1);
+    });
+
+    test('fallback clears split tunnel state so a second connect is allowed',
+        () async {
+      controller.rdpHostCtrl.text = '192.168.1.100';
+      controller.subnetsCtrl.text = '10.0.0.0/8';
+      controller.gatewayCtrl.text = '192.168.1.1';
+      controller.ifaceCtrl.text = 'Wi-Fi';
+      controller.rdpPortCtrl.text = '3389';
+
+      when(() => mockSettingsStorage.clearPendingSplitTunnelCleanup())
+          .thenAnswer((_) async {});
+      when(() => mockWorkflowService.connect(
+            subnets: ['10.0.0.0/8'],
+            host: '192.168.1.100',
+            user: '',
+            domain: '',
+            selectedWifi: '',
+            gateway: '192.168.1.1',
+            iface: 'Wi-Fi',
+            resolvedPort: 3389,
+            rdpProfile: 'adaptive',
+            wifiPassword: '',
+            onSelectServer: any(named: 'onSelectServer'),
+            onSplitTunnelEnabled: any(named: 'onSplitTunnelEnabled'),
+            onSplitTunnelRolledBack: any(named: 'onSplitTunnelRolledBack'),
+            onSplitTunnelUnavailable: any(named: 'onSplitTunnelUnavailable'),
+          )).thenAnswer((invocation) {
+        final onUnavailable =
+            invocation.namedArguments[#onSplitTunnelUnavailable] as Future<void>
+                Function()?;
+        return () async* {
+          yield const WorkflowState(
+            step: ConnectionStep.splitTunnel,
+            logMessage: 'Preparando túnel',
+          );
+          await onUnavailable?.call();
+          yield const WorkflowState(
+            step: ConnectionStep.preLaunch,
+            logMessage: 'Túnel no disponible',
+            isError: true,
+          );
+          yield const WorkflowState(
+            step: ConnectionStep.done,
+            logMessage: 'Conectado',
+            isFinished: true,
+          );
+        }();
+      });
+
+      await controller.connect();
+
+      expect(controller.splitTunnelActive, isFalse);
+      verifyNever(() => mockSettingsStorage.clearPendingSplitTunnelCleanup());
+
+      await controller.connect();
+      verifyNever(() => mockRouteManager.disableSplitTunnel());
     });
 
     test('connect rejects empty subnets or host', () async {

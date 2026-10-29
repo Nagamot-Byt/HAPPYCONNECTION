@@ -23,7 +23,7 @@ class ServerPreset {
   final String host;
   final int port;
 
-  ServerPreset({
+  const ServerPreset({
     required this.id,
     required this.label,
     required this.host,
@@ -238,7 +238,17 @@ class HomeController extends ChangeNotifier {
   Future<void> init() async {
     _logs.clear();
     log('Iniciando MedLink Connect...');
-    await _loadSettings();
+    try {
+      await _loadSettings();
+    } catch (e) {
+      log('No se pudieron cargar los ajustes guardados: $e', isError: true);
+    }
+    try {
+      await _cleanupStaleSplitTunnel();
+    } catch (e) {
+      log('No se pudieron limpiar rutas de una sesión anterior: $e',
+          isError: true);
+    }
     _loaded = true;
     notifyListeners();
     setReadyGuidance();
@@ -246,6 +256,51 @@ class HomeController extends ChangeNotifier {
     // We can run these without awaiting init
     refreshWifiNetworks(silent: true);
     syncCurrentWifiInfo(silent: true);
+  }
+
+  Future<void> _persistSplitTunnelCleanup({
+    required List<String> subnets,
+    required String gateway,
+    required String interfaceName,
+  }) async {
+    final s = settings;
+    if (s == null) return;
+    await s.setPendingSplitTunnelCleanup(
+      subnets: subnets,
+      gateway: gateway,
+      interfaceName: interfaceName,
+    );
+  }
+
+  Future<void> _cleanupStaleSplitTunnel() async {
+    final s = settings;
+    if (s == null) return;
+    final pending = s.pendingSplitTunnelCleanup;
+    if (pending == null) return;
+
+    log('Detectado un túnel anterior sin cierre limpio; retirando rutas…');
+    final failures = <String>[];
+    for (final subnet in pending.subnets) {
+      try {
+        await routeManager.removeRoute(
+          destinationCidr: subnet,
+          gateway: pending.gateway,
+          interfaceName: pending.interfaceName,
+        );
+      } catch (e) {
+        failures.add('$subnet ($e)');
+      }
+    }
+    if (failures.isEmpty) {
+      await s.clearPendingSplitTunnelCleanup();
+      _splitTunnelActive = false;
+      log('Rutas de la sesión anterior eliminadas.');
+    } else {
+      log(
+        'No se pudieron retirar todas las rutas previas: ${failures.join(', ')}',
+        isError: true,
+      );
+    }
   }
 
   Future<void> _loadSettings() async {
@@ -264,17 +319,42 @@ class HomeController extends ChangeNotifier {
     rdpUserCtrl.text = s.rdpUsername;
     rdpDomainCtrl.text = s.rdpDomain;
     rdpProfile = s.rdpProfile;
+    _preferMostStableServer = s.preferMostStableServer;
     selectedWifiSsid = s.wifiSsid.isEmpty ? null : s.wifiSsid;
     manualWifiCtrl.text = s.wifiSsid;
+    _selectedServerPresetId = s.selectedServerPresetId;
 
-    // TODO: Load server presets from somewhere or keep hardcoded for now
-    serverPresets = [
+    serverPresets = const [
       ServerPreset(
-          id: 'srv1',
-          label: 'Servidor Principal',
-          host: '192.168.1.100',
+          id: 'pediatrico',
+          label: 'Pediatría',
+          host: 'serv_pediatrico.huv.gov.co',
+          port: 3389),
+      ServerPreset(
+          id: 'ginecologico',
+          label: 'Ginecología',
+          host: 'serv_ginecologico.huv.gov.co',
+          port: 3389),
+      ServerPreset(
+          id: 'moviles',
+          label: 'Móviles',
+          host: 'serv_moviles.huv.gov.co',
+          port: 3389),
+      ServerPreset(
+          id: 'consulta_externa',
+          label: 'Consulta Externa',
+          host: 'serv_const_ext.huv.gov.co',
+          port: 3389),
+      ServerPreset(
+          id: 'urgencias',
+          label: 'Urgencias',
+          host: 'serv_urgencias.huv.gov.co',
           port: 3389),
     ];
+    if (_selectedServerPresetId != 'manual' &&
+        !_serverPresets.any((p) => p.id == _selectedServerPresetId)) {
+      _selectedServerPresetId = 'manual';
+    }
   }
 
   Future<void> saveSettings() async {
@@ -289,12 +369,22 @@ class HomeController extends ChangeNotifier {
     s.rdpUsername = rdpUserCtrl.text;
     s.rdpDomain = rdpDomainCtrl.text;
     s.rdpProfile = rdpProfile;
+    s.preferMostStableServer = preferMostStableServer;
 
     final w = resolvedWifiSsid();
     if (w.isNotEmpty) {
       s.wifiSsid = w;
     }
+    s.selectedServerPresetId = selectedServerPresetId;
     await s.save();
+  }
+
+  Future<void> _saveSettingsSafely() async {
+    try {
+      await saveSettings();
+    } catch (e) {
+      log('No se pudieron guardar los ajustes: $e', isError: true);
+    }
   }
 
   String resolvedWifiSsid() {
@@ -329,10 +419,14 @@ class HomeController extends ChangeNotifier {
       final info = await wifiManager!.getCurrentConnectionInfo();
       _currentWifiSsid = info.ssid;
       if (info.ssid.isNotEmpty) {
-        gatewayCtrl.text = info.gateway;
-        ifaceCtrl.text = info.interfaceName;
+        if (info.gateway.trim().isNotEmpty) {
+          gatewayCtrl.text = info.gateway;
+        }
+        if (info.interfaceName.trim().isNotEmpty) {
+          ifaceCtrl.text = info.interfaceName;
+        }
         if (!silent) {
-          log('Red actual: ${info.ssid}. Gateway: ${info.gateway}, Interfaz: ${info.interfaceName}.');
+          log('Red actual: ${info.ssid}. Gateway: ${gatewayCtrl.text}, Interfaz: ${ifaceCtrl.text}.');
         }
       } else {
         if (!silent) log('No hay red Wi-Fi activa.');
@@ -386,18 +480,50 @@ class HomeController extends ChangeNotifier {
   }) async {
     if (serverPresets.isEmpty) return null;
     log('Diagnosticando mejor servidor...', isError: false);
-    for (final preset in serverPresets) {
-      if (!preset.isConfigured) continue;
-      try {
-        final ms = await measureTcpPortWithRetry(preset.host, preset.port);
-        if (ms != null && ms > 0) {
-          log('Servidor ${preset.label} responde en ${ms}ms');
-          if (updateGuidance) applyServerPreset(preset, announce: false);
-          return preset;
-        }
-      } catch (e) {}
+    final responses = <MapEntry<ServerPreset, int>>[];
+    // Los cinco destinos se prueban en paralelo para no encadenar sus tiempos
+    // de espera; se conserva el de menor latencia TCP.
+    await Future.wait([
+      for (final preset in serverPresets)
+        if (preset.isConfigured)
+          () async {
+            try {
+              final ms = await measureTcpPortWithRetry(
+                preset.host,
+                preset.port,
+                label: preset.label,
+              );
+              if (ms != null && ms > 0) {
+                log('Servidor ${preset.label} responde en ${ms}ms');
+                responses.add(MapEntry(preset, ms));
+              }
+            } catch (e) {
+              log('Servidor ${preset.label} no respondió: $e');
+            }
+          }(),
+    ]);
+
+    ServerPreset? best;
+    int? bestMs;
+    for (final response in responses) {
+      if (bestMs == null || response.value < bestMs) {
+        best = response.key;
+        bestMs = response.value;
+      }
+    }
+    if (best != null) {
+      if (bestMs != null) {
+        log('Mejor servidor: ${best.label} (${bestMs}ms).');
+      }
+      if (updateGuidance) applyServerPreset(best, announce: false);
+      return best;
     }
     final fallback = serverPresets.first;
+    log(
+      'Ningún servidor preconfigurado respondió. Se usará ${fallback.label} '
+      'para intentar la conexión.',
+      isError: true,
+    );
     if (updateGuidance) applyServerPreset(fallback, announce: false);
     return fallback;
   }
@@ -490,8 +616,9 @@ class HomeController extends ChangeNotifier {
   Future<bool> connectSelectedWifi({required bool requireSelection}) async {
     final selectedWifi = resolvedWifiSsid();
     if (selectedWifi.isEmpty) {
-      if (requireSelection)
+      if (requireSelection) {
         log('No hay Wi-Fi seleccionado para conectar.', isError: true);
+      }
       return false;
     }
     final password = wifiPasswordCtrl.text;
@@ -499,25 +626,28 @@ class HomeController extends ChangeNotifier {
     if (wifiManager != null) {
       final res =
           await wifiManager!.connect(ssid: selectedWifi, password: password);
-      final success = res == "connected" ||
-          res == "" ||
-          res.toLowerCase().contains("success") ||
-          res.toLowerCase().contains("conectado");
-      if (success) {
-        // Esperar a que Windows confirme la conexión y obtenga gateway/interfaz
-        await waitForTargetWifiConnection(selectedWifi);
-        await syncCurrentWifiInfo(silent: true);
-        // Intento adicional para obtener gateway/interfaz
-        for (var i = 0;
-            i < 6 &&
-                (gatewayCtrl.text.trim().isEmpty ||
-                    ifaceCtrl.text.trim().isEmpty);
-            i++) {
-          await Future<void>.delayed(Duration(milliseconds: 800 + i * 200));
-          await syncCurrentWifiInfo(silent: true);
-        }
+      // La respuesta puede ser solo "solicitud enviada"; la fuente de verdad
+      // es que el sistema reporte la SSID objetivo.
+      final confirmed = await waitForTargetWifiConnection(selectedWifi);
+      if (confirmed == null) {
+        log(
+          'El sistema no confirmó la red "$selectedWifi". '
+          '${res.trim().isEmpty ? '' : 'Respuesta: $res'}',
+          isError: true,
+        );
+        return false;
       }
-      return success;
+      await syncCurrentWifiInfo(silent: true);
+      // Intento adicional para obtener gateway/interfaz
+      for (var i = 0;
+          i < 6 &&
+              (gatewayCtrl.text.trim().isEmpty ||
+                  ifaceCtrl.text.trim().isEmpty);
+          i++) {
+        await Future<void>.delayed(Duration(milliseconds: 800 + i * 200));
+        await syncCurrentWifiInfo(silent: true);
+      }
+      return true;
     }
     return false;
   }
@@ -561,7 +691,11 @@ class HomeController extends ChangeNotifier {
     return (v <= 0 || v > 65535) ? 3389 : v;
   }
 
-  Future<int?> measureTcpPortWithRetry(String host, int port) async {
+  Future<int?> measureTcpPortWithRetry(
+    String host,
+    int port, {
+    String? label,
+  }) async {
     const delays = <Duration>[
       Duration.zero,
       Duration(milliseconds: 350),
@@ -572,7 +706,11 @@ class HomeController extends ChangeNotifier {
     for (var attempt = 0; attempt < delays.length; attempt++) {
       final delay = delays[attempt];
       if (delay > Duration.zero) {
-        log('Reintentando acceso TCP al servidor ($attempt/${delays.length - 1})...');
+        log(
+          'Reintentando acceso TCP al servidor'
+          '${label == null ? '' : ' $label'} '
+          '($attempt/${delays.length - 1})...',
+        );
         await Future<void>.delayed(delay);
       }
       final latency = await networkDiagnostics.checkTcpPort(host, port);
@@ -594,18 +732,30 @@ class HomeController extends ChangeNotifier {
     _step = ConnectionStep.diagnostics;
     notifyListeners();
     log('Iniciando diagnósticos de red…');
-    await saveSettings();
 
     try {
-      final dns = await networkDiagnostics.flushDns();
-      log(dns);
-      final cache = await networkDiagnostics.clearNetworkCaches();
-      log(cache);
-      final ping = await networkDiagnostics.ping('8.8.8.8');
-      if (ping != null) {
-        log('Ping a 8.8.8.8: ${ping}ms');
-      } else {
-        log('Ping a 8.8.8.8: inalcanzable', isError: true);
+      await _saveSettingsSafely();
+      try {
+        final dns = await networkDiagnostics.flushDns();
+        log(dns);
+      } catch (e) {
+        log('No se pudo limpiar la caché DNS: $e', isError: true);
+      }
+      try {
+        final cache = await networkDiagnostics.clearNetworkCaches();
+        log(cache);
+      } catch (e) {
+        log('No se pudo limpiar la caché ARP: $e', isError: true);
+      }
+      try {
+        final ping = await networkDiagnostics.ping('8.8.8.8');
+        if (ping != null) {
+          log('Ping a 8.8.8.8: ${ping}ms');
+        } else {
+          log('Ping a 8.8.8.8: inalcanzable', isError: true);
+        }
+      } catch (e) {
+        log('Ping a 8.8.8.8 falló: $e', isError: true);
       }
       log('Diagnósticos completados.');
       setGuidance(
@@ -767,13 +917,6 @@ class HomeController extends ChangeNotifier {
   Future<void> connect() async {
     if (_busy) return;
     final subnets = parseSubnets();
-    final host = rdpHostCtrl.text.trim();
-    final user = rdpUserCtrl.text.trim();
-    final domain = rdpDomainCtrl.text.trim();
-    final selectedWifi = resolvedWifiSsid();
-    String gateway = gatewayCtrl.text.trim();
-    String iface = ifaceCtrl.text.trim();
-    final port = parsePort();
 
     if (subnets.isEmpty) {
       log(
@@ -782,50 +925,95 @@ class HomeController extends ChangeNotifier {
       );
       return;
     }
-    if (host.isEmpty) {
-      log('Configuración inválida: host RDP es obligatorio.', isError: true);
-      return;
-    }
-
-    // Intentar detectar gateway/interfaz si faltan
-    if ((gateway.isEmpty || iface.isEmpty) && wifiManager != null) {
-      log('Detectando gateway/interfaz...');
-      await syncCurrentWifiInfo(silent: true);
-      gateway = gatewayCtrl.text.trim();
-      iface = ifaceCtrl.text.trim();
-      if (gateway.isEmpty || iface.isEmpty) {
-        try {
-          final info = await routeManager.getPrimaryDefaultRouteInfo();
-          gateway = gateway.isEmpty ? (info['gateway'] ?? '').trim() : gateway;
-          iface = iface.isEmpty ? (info['interfaceName'] ?? '').trim() : iface;
-          if (gateway.isNotEmpty) gatewayCtrl.text = gateway;
-          if (iface.isNotEmpty) ifaceCtrl.text = iface;
-        } catch (_) {}
-      }
-    }
-
-    if (gateway.isEmpty || iface.isEmpty) {
-      log('Faltan gateway o interfaz. Usa "Detectar red actual" o completa los campos en Opciones avanzadas.',
-          isError: true);
-      setGuidance(
-        'Faltan datos de red',
-        bullets: [
-          'No se detectó gateway o interfaz automáticamente.',
-          'Pulsa "Detectar red actual" o complétalos manualmente.',
-          'Asegúrate de estar conectado a la red del hospital.',
-        ],
-        isError: true,
-      );
-      return;
-    }
 
     clearGuidance();
     _busy = true;
+    _step = ConnectionStep.diagnostics;
     notifyListeners();
 
-    await saveSettings();
-
     try {
+      await _saveSettingsSafely();
+
+      final hostBeforeAuto = rdpHostCtrl.text.trim();
+      final hostIsPreset = serverPresets.any((p) => p.host == hostBeforeAuto);
+      final shouldAutoSelect = preferMostStableServer &&
+          serverPresets.isNotEmpty &&
+          (hostBeforeAuto.isEmpty || hostIsPreset);
+
+      final host = rdpHostCtrl.text.trim();
+      final user = rdpUserCtrl.text.trim();
+      final domain = rdpDomainCtrl.text.trim();
+      final selectedWifi = resolvedWifiSsid();
+      String gateway = gatewayCtrl.text.trim();
+      String iface = ifaceCtrl.text.trim();
+      final port = parsePort();
+
+      if (host.isEmpty) {
+        log('Configuración inválida: host RDP es obligatorio.', isError: true);
+        setGuidance(
+          'Falta el servidor RDP',
+          bullets: [
+            'Escribe el host o la IP del servidor.',
+            'También puedes elegir un servidor preconfigurado.',
+          ],
+          isError: true,
+        );
+        return;
+      }
+
+      // Intentar detectar gateway/interfaz si faltan
+      if (gateway.isEmpty || iface.isEmpty) {
+        log('Detectando gateway/interfaz...');
+        try {
+          await syncCurrentWifiInfo(silent: true);
+        } catch (_) {}
+        gateway = gatewayCtrl.text.trim();
+        iface = ifaceCtrl.text.trim();
+        if (gateway.isEmpty || iface.isEmpty) {
+          try {
+            final info = await routeManager.getPrimaryDefaultRouteInfo();
+            gateway =
+                gateway.isEmpty ? (info['gateway'] ?? '').trim() : gateway;
+            iface =
+                iface.isEmpty ? (info['interfaceName'] ?? '').trim() : iface;
+            if (gateway.isNotEmpty) gatewayCtrl.text = gateway;
+            if (iface.isNotEmpty) ifaceCtrl.text = iface;
+          } catch (_) {}
+        }
+      }
+
+      if (gateway.isEmpty || iface.isEmpty) {
+        log(
+          'Faltan gateway o interfaz. Usa "Detectar red actual" o completa los campos en Opciones avanzadas.',
+          isError: true,
+        );
+        setGuidance(
+          'Faltan datos de red',
+          bullets: [
+            'No se detectó gateway o interfaz automáticamente.',
+            'Pulsa "Detectar red actual" o complétalos manualmente.',
+            'Asegúrate de estar conectado a la red del hospital.',
+          ],
+          isError: true,
+        );
+        return;
+      }
+
+      if (_splitTunnelActive) {
+        log('Cerrando el túnel anterior antes de reconectar…');
+        try {
+          await routeManager.disableSplitTunnel();
+          _splitTunnelActive = false;
+          try {
+            await settings?.clearPendingSplitTunnelCleanup();
+          } catch (_) {}
+        } catch (e) {
+          log('No se pudo cerrar el túnel anterior: $e', isError: true);
+          setErrorGuidance(e);
+          return;
+        }
+      }
+
       await for (final state in workflowService.connect(
         subnets: subnets,
         host: host,
@@ -835,9 +1023,42 @@ class HomeController extends ChangeNotifier {
         gateway: gateway,
         iface: iface,
         resolvedPort: port,
-        preferMostStableServer: preferMostStableServer,
         rdpProfile: rdpProfile,
         wifiPassword: wifiPasswordCtrl.text,
+        onSelectServer: shouldAutoSelect
+            ? () async {
+                log('Seleccionando automáticamente el servidor más estable…');
+                try {
+                  final best =
+                      await diagnoseBestServerPreset(updateGuidance: true);
+                  if (best == null) return null;
+                  return (host: best.host, port: best.port);
+                } catch (e) {
+                  log(
+                    'No se pudo seleccionar el mejor servidor: $e',
+                    isError: true,
+                  );
+                  return null;
+                }
+              }
+            : null,
+        onSplitTunnelEnabled: (subnets, gateway, iface) =>
+            _persistSplitTunnelCleanup(
+          subnets: subnets,
+          gateway: gateway,
+          interfaceName: iface,
+        ),
+        onSplitTunnelUnavailable: () async {
+          _splitTunnelActive = false;
+        },
+        onSplitTunnelRolledBack: () async {
+          _splitTunnelActive = false;
+          try {
+            await settings?.clearPendingSplitTunnelCleanup();
+          } catch (_) {
+            // Si falla, el registro se reintentará en el próximo arranque.
+          }
+        },
       )) {
         _step = state.step;
         if (state.step == ConnectionStep.splitTunnel) {
@@ -863,6 +1084,9 @@ class HomeController extends ChangeNotifier {
     } finally {
       wifiPasswordCtrl.clear();
       _busy = false;
+      if (_step == ConnectionStep.diagnostics) {
+        _step = ConnectionStep.idle;
+      }
       notifyListeners();
     }
   }
@@ -877,6 +1101,11 @@ class HomeController extends ChangeNotifier {
       final msg = await routeManager.disableSplitTunnel();
       log(msg);
       _splitTunnelActive = false;
+      try {
+        await settings?.clearPendingSplitTunnelCleanup();
+      } catch (e) {
+        log('No se pudo limpiar el registro de rutas: $e', isError: true);
+      }
       notifyListeners();
       setReadyGuidance();
     } catch (e) {
@@ -892,8 +1121,6 @@ class HomeController extends ChangeNotifier {
   Future<void> resetSettings() async {
     final s = settings;
     if (s == null) return;
-    final confirm = true;
-    if (confirm != true) return;
     await s.clear();
 
     subnetsCtrl.text = s.hospitalSubnetsAsText;
@@ -904,8 +1131,10 @@ class HomeController extends ChangeNotifier {
     rdpUserCtrl.text = s.rdpUsername;
     rdpDomainCtrl.text = s.rdpDomain;
     rdpProfile = s.rdpProfile;
+    _preferMostStableServer = s.preferMostStableServer;
     selectedWifiSsid = s.wifiSsid.isEmpty ? null : s.wifiSsid;
     manualWifiCtrl.text = s.wifiSsid;
+    _selectedServerPresetId = s.selectedServerPresetId;
     wifiPasswordCtrl.clear();
     notifyListeners();
     log('Ajustes restablecidos a predeterminados.');

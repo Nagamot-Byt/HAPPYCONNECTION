@@ -11,7 +11,15 @@ abstract class RouteManager {
   });
 
   /// Removes a previously added route.
-  Future<String> removeRoute({required String destinationCidr});
+  ///
+  /// When [gateway] and [interfaceName] are provided, the route is removed
+  /// even if it is not tracked in the current process (used to clean routes
+  /// left behind by a previous session).
+  Future<String> removeRoute({
+    required String destinationCidr,
+    String? gateway,
+    String? interfaceName,
+  });
 
   /// Enables split-tunneling by adding one route for every subnet in
   /// [hospitalSubnets]. If any route fails, all previously added routes

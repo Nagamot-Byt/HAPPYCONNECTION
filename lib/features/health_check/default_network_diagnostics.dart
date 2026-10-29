@@ -38,7 +38,7 @@ class DefaultNetworkDiagnostics implements NetworkDiagnostics {
   Future<int?> ping(String host) async {
     try {
       final result = await _channel.invokeMethod<int>(
-          'ping', {'host': host}).timeout(const Duration(seconds: 2));
+          'ping', {'host': host}).timeout(const Duration(seconds: 4));
       return result;
     } catch (_) {
       return null;
@@ -51,7 +51,7 @@ class DefaultNetworkDiagnostics implements NetworkDiagnostics {
       final result = await _channel.invokeMethod<int>('checkTcpPort', {
         'host': host,
         'port': port,
-      }).timeout(const Duration(seconds: 2));
+      }).timeout(const Duration(seconds: 4));
       return result;
     } catch (_) {
       return null;

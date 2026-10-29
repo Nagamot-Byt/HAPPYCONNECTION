@@ -93,6 +93,53 @@ void main() {
     });
   });
 
+  group('InputSanitizer - interface and Wi-Fi names', () {
+    test('accepts real Windows and Linux interface names', () {
+      expect(InputSanitizer.sanitizeInterfaceName('Wi-Fi'), 'Wi-Fi');
+      expect(InputSanitizer.sanitizeInterfaceName('vEthernet (Default Switch)'),
+          'vEthernet (Default Switch)');
+      expect(InputSanitizer.sanitizeInterfaceName('enp3s0.100'), 'enp3s0.100');
+      expect(InputSanitizer.sanitizeInterfaceName('Wi-Fi 2.4 GHz'),
+          'Wi-Fi 2.4 GHz');
+    });
+
+    test('rejects control characters and empty interface names', () {
+      expect(() => InputSanitizer.sanitizeInterfaceName('Wi-Fi\nGuest'),
+          throwsArgumentError);
+      expect(() => InputSanitizer.sanitizeInterfaceName('   '),
+          throwsArgumentError);
+    });
+
+    test('accepts SSIDs with punctuation and accents', () {
+      expect(InputSanitizer.sanitizeSsid('HUV & Visitantes (5G)'),
+          'HUV & Visitantes (5G)');
+      expect(InputSanitizer.sanitizeSsid('Wi-Fi Pediatría'), 'Wi-Fi Pediatría');
+    });
+
+    test('rejects control characters and long SSIDs', () {
+      expect(() => InputSanitizer.sanitizeSsid('HUV\r\nGuest'),
+          throwsArgumentError);
+      expect(() => InputSanitizer.sanitizeSsid('x' * 33), throwsArgumentError);
+    });
+  });
+
+  group('InputSanitizer - sanitizeRdpCredential', () {
+    test('accepts domain credentials', () {
+      expect(
+          InputSanitizer.sanitizeRdpCredential('HUV\\doctor'), 'HUV\\doctor');
+      expect(InputSanitizer.sanitizeRdpCredential(' doctor '), 'doctor');
+    });
+
+    test('rejects newlines and empty credentials', () {
+      expect(
+          () => InputSanitizer.sanitizeRdpCredential(
+              'doctor\r\nfull address:s:evil'),
+          throwsArgumentError);
+      expect(
+          () => InputSanitizer.sanitizeRdpCredential(' '), throwsArgumentError);
+    });
+  });
+
   group('InputSanitizer - sanitizeSubnets', () {
     test('sanitizes list of subnets', () {
       final list = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'];

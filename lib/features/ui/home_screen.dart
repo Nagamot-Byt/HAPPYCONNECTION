@@ -85,7 +85,32 @@ class _HomeScreenContent extends StatelessWidget {
               tooltip: 'Restablecer ajustes',
               onPressed: controller.busy || controller.settings == null
                   ? null
-                  : controller.resetSettings,
+                  : () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: const Text('Restablecer ajustes'),
+                          content: const Text(
+                              'Se borrarán las subredes, credenciales RDP y '
+                              'preferencias guardadas. ¿Continuar?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(false),
+                              child: const Text('Cancelar'),
+                            ),
+                            FilledButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(true),
+                              child: const Text('Restablecer'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        await controller.resetSettings();
+                      }
+                    },
               icon: const Icon(Icons.restore_outlined),
             ),
             const SizedBox(width: 8),

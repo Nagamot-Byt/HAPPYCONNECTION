@@ -1,6 +1,7 @@
 import 'package:injectable/injectable.dart';
 import 'package:flutter/services.dart';
 import 'package:medlink_connect/core/exceptions.dart';
+import 'package:medlink_connect/core/input_sanitizer.dart';
 import 'package:medlink_connect/core/route_manager.dart';
 
 /// Default [RouteManager] implementation that communicates with the native
@@ -10,16 +11,21 @@ class DefaultRouteManager implements RouteManager {
   static const _channel = MethodChannel('com.medlinkconnect/route_manager');
 
   bool _isValidIpv4(String ip) {
-    final regex = RegExp(r'^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$');
-    return regex.hasMatch(ip);
+    try {
+      InputSanitizer.sanitizeIpv4(ip);
+      return true;
+    } on ArgumentError {
+      return false;
+    }
   }
 
   bool _isValidCidr(String cidr) {
-    final parts = cidr.split('/');
-    if (parts.length != 2) return _isValidIpv4(cidr);
-    if (!_isValidIpv4(parts[0])) return false;
-    final prefix = int.tryParse(parts[1]);
-    return prefix != null && prefix >= 0 && prefix <= 32;
+    try {
+      InputSanitizer.sanitizeCidr(cidr);
+      return true;
+    } on ArgumentError {
+      return false;
+    }
   }
 
   @override
@@ -50,12 +56,31 @@ class DefaultRouteManager implements RouteManager {
   }
 
   @override
-  Future<String> removeRoute({required String destinationCidr}) async {
+  Future<String> removeRoute({
+    required String destinationCidr,
+    String? gateway,
+    String? interfaceName,
+  }) async {
+    if (!_isValidCidr(destinationCidr)) {
+      throw const RouteConfigurationException(
+          'Validación fallida: destinationCidr no es un formato válido IPv4/CIDR.');
+    }
+    final hasGateway = gateway != null && gateway.isNotEmpty;
+    final hasInterface = interfaceName != null && interfaceName.isNotEmpty;
+    if (hasGateway != hasInterface) {
+      throw const RouteConfigurationException(
+          'Para limpiar una ruta exacta se requieren gateway e interfaz.');
+    }
+    if (hasGateway && !_isValidIpv4(gateway)) {
+      throw const RouteConfigurationException(
+          'Validación fallida: gateway no es una IP válida.');
+    }
     try {
-      final result = await _channel.invokeMethod<String>(
-        'removeRoute',
-        {'destinationCidr': destinationCidr},
-      );
+      final result = await _channel.invokeMethod<String>('removeRoute', {
+        'destinationCidr': destinationCidr,
+        if (hasGateway) 'gateway': gateway,
+        if (hasInterface) 'interfaceName': interfaceName,
+      });
       return result ?? 'Route removed.';
     } on PlatformException catch (e) {
       throw RouteConfigurationException(

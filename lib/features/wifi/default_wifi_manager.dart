@@ -13,9 +13,6 @@ class DefaultWifiManager implements WifiManager {
     try {
       final result = await _channel.invokeMethod<List<dynamic>>('scanNetworks');
       return (result ?? <dynamic>[]).cast<String>();
-    } on MissingPluginException {
-      throw Exception(
-          'Wi-Fi automático no está disponible en esta plataforma.');
     } on PlatformException catch (e) {
       throw WifiConnectionException(
           'Error listando redes Wi-Fi (${e.code}): ${e.message}');
@@ -33,9 +30,6 @@ class DefaultWifiManager implements WifiManager {
         'password': password,
       });
       return result ?? 'Solicitud de conexión Wi-Fi enviada.';
-    } on MissingPluginException {
-      throw Exception(
-          'Wi-Fi automático no está disponible en esta plataforma.');
     } on PlatformException catch (e) {
       throw WifiConnectionException(
           'Error conectando Wi-Fi (${e.code}): ${e.message}');
@@ -53,9 +47,6 @@ class DefaultWifiManager implements WifiManager {
         interfaceName: (map['interfaceName'] as String?) ?? '',
         gateway: (map['gateway'] as String?) ?? '',
       );
-    } on MissingPluginException {
-      throw Exception(
-          'Wi-Fi automático no está disponible en esta plataforma.');
     } on PlatformException catch (e) {
       throw WifiConnectionException(
         'Error consultando Wi-Fi actual (${e.code}): ${e.message}',

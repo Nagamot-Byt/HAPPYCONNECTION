@@ -203,8 +203,9 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
     final value = (() {
       final selected = controller.selectedWifiSsid;
       if (selected == null || selected.isEmpty) return null;
-      if (selected == controller.manualWifiOption)
+      if (selected == controller.manualWifiOption) {
         return controller.manualWifiOption;
+      }
       return options.contains(selected)
           ? selected
           : controller.manualWifiOption;

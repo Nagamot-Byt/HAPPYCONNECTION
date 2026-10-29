@@ -55,6 +55,24 @@ void main() {
     );
     expect(log.isEmpty, isTrue);
 
+    expect(
+      () => routeManager.addRoute(
+        destinationCidr: '1234',
+        gateway: '192.168.1.1',
+        interfaceName: 'Wi-Fi',
+      ),
+      throwsA(isA<RouteConfigurationException>()),
+    );
+    expect(
+      () => routeManager.addRoute(
+        destinationCidr: '10.0.0.0/8',
+        gateway: '999.1.1.1',
+        interfaceName: 'Wi-Fi',
+      ),
+      throwsA(isA<RouteConfigurationException>()),
+    );
+    expect(log.isEmpty, isTrue);
+
     final res = await routeManager.addRoute(
       destinationCidr: '10.0.0.0/8',
       gateway: '192.168.1.1',
@@ -64,6 +82,39 @@ void main() {
     expect(log.length, equals(1));
     expect(log.first.method, equals('addRoute'));
     expect(log.first.arguments['destinationCidr'], equals('10.0.0.0/8'));
+  });
+
+  test('removeRoute can clean an exact stale route', () async {
+    final res = await routeManager.removeRoute(
+      destinationCidr: '10.0.0.0/8',
+      gateway: '192.168.1.1',
+      interfaceName: 'Wi-Fi',
+    );
+    expect(res, equals('Route removed OK'));
+    expect(log.first.method, equals('removeRoute'));
+    expect(log.first.arguments['destinationCidr'], equals('10.0.0.0/8'));
+    expect(log.first.arguments['gateway'], equals('192.168.1.1'));
+    expect(log.first.arguments['interfaceName'], equals('Wi-Fi'));
+  });
+
+  test('removeRoute rejects incomplete or invalid exact cleanup data',
+      () async {
+    await expectLater(
+      routeManager.removeRoute(
+        destinationCidr: '10.0.0.0/8',
+        gateway: '192.168.1.1',
+      ),
+      throwsA(isA<RouteConfigurationException>()),
+    );
+    await expectLater(
+      routeManager.removeRoute(
+        destinationCidr: '10.0.0.0/8',
+        gateway: '999.1.1.1',
+        interfaceName: 'Wi-Fi',
+      ),
+      throwsA(isA<RouteConfigurationException>()),
+    );
+    expect(log.isEmpty, isTrue);
   });
 
   test('enableSplitTunnel invokes channel correctly', () async {

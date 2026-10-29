@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:medlink_connect/core/app_theme.dart';
 import 'package:medlink_connect/core/injection.dart';
-import 'package:medlink_connect/features/settings/settings_service.dart';
 import 'package:medlink_connect/features/ui/home_screen.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
@@ -39,19 +37,6 @@ class MedLinkConnectApp extends StatelessWidget {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await configureDependencies();
-
-  SettingsService settings;
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    settings = SettingsService(prefs);
-  } catch (_) {
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    settings = SettingsService(prefs);
-  }
-  if (!getIt.isRegistered<SettingsService>()) {
-    getIt.registerSingleton<SettingsService>(settings);
-  }
 
   runApp(const MedLinkConnectApp());
 }

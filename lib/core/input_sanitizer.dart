@@ -1,5 +1,7 @@
-/// Centralized input validation for all values that flow to native platform
-/// commands (PowerShell, cmd). Prevents command injection attacks.
+/// Centralized input validation for values that flow to native platform APIs.
+/// Host/CIDR values still pass through shell-based helpers on some platforms,
+/// so they keep a strict allow-list; interface and SSID names only reject
+/// control characters (they are passed as arguments, never as shell text).
 abstract final class InputSanitizer {
   // Regex for valid IPv4: e.g., 192.168.1.1
   static final _ipv4Pattern =
@@ -9,10 +11,10 @@ abstract final class InputSanitizer {
   static final _hostnamePattern =
       RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,253}[a-zA-Z0-9]$');
 
-  // Regex for interface names: letters, digits, spaces, hyphens, underscores
-  static final _interfacePattern = RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9 _-]{0,63}$');
+  // Control characters are never valid in names sent to native APIs.
+  static final _controlChars = RegExp(r'[\x00-\x1F\x7F]');
 
-  // Dangerous shell metacharacters
+  // Dangerous shell metacharacters (hostnames still flow to OS commands).
   static final _shellMetaChars = RegExp(r'[;&|`$(){}\[\]<>!\\\n\r]');
 
   /// Validates and returns a sanitized IPv4 address.
@@ -86,6 +88,9 @@ abstract final class InputSanitizer {
   }
 
   /// Validates and returns a sanitized network interface name.
+  ///
+  /// Interface names are passed to native APIs (not to a shell), so names such
+  /// as `vEthernet (Default Switch)` or `Wi-Fi 2.4` are valid.
   static String sanitizeInterfaceName(String input,
       {String fieldName = 'Interfaz'}) {
     final trimmed = input.trim();
@@ -93,32 +98,52 @@ abstract final class InputSanitizer {
       throw ArgumentError.value(
           trimmed, fieldName, 'El campo no puede estar vacío.');
     }
-    if (_shellMetaChars.hasMatch(trimmed)) {
+    if (_controlChars.hasMatch(trimmed)) {
       throw ArgumentError.value(
-          trimmed, fieldName, 'Contiene caracteres no permitidos.');
+          trimmed, fieldName, 'Contiene caracteres de control no permitidos.');
     }
-    if (!_interfacePattern.hasMatch(trimmed)) {
+    if (trimmed.length > 128) {
       throw ArgumentError.value(
-          trimmed, fieldName, 'Nombre de interfaz inválido.');
+          trimmed, fieldName, 'El nombre de interfaz es demasiado largo.');
     }
     return trimmed;
   }
 
   /// Validates and returns a sanitized Wi-Fi SSID.
-  /// SSIDs can contain most printable characters but we strip shell dangers.
+  /// SSIDs can contain most printable characters (including `&` or `()`).
   static String sanitizeSsid(String input, {String fieldName = 'SSID'}) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) {
       throw ArgumentError.value(
           trimmed, fieldName, 'El campo no puede estar vacío.');
     }
-    if (_shellMetaChars.hasMatch(trimmed)) {
+    if (_controlChars.hasMatch(trimmed)) {
       throw ArgumentError.value(trimmed, fieldName,
-          'El SSID contiene caracteres no seguros para operaciones del sistema.');
+          'El SSID contiene caracteres de control no permitidos.');
     }
     if (trimmed.length > 32) {
       throw ArgumentError.value(
           trimmed, fieldName, 'El SSID no puede tener más de 32 caracteres.');
+    }
+    return trimmed;
+  }
+
+  /// Validates an RDP username or domain. Newlines and control characters
+  /// are rejected to prevent injection into generated `.rdp` files.
+  static String sanitizeRdpCredential(String input,
+      {String fieldName = 'Credencial RDP'}) {
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(
+          trimmed, fieldName, 'El campo no puede estar vacío.');
+    }
+    if (_controlChars.hasMatch(trimmed)) {
+      throw ArgumentError.value(
+          trimmed, fieldName, 'Contiene caracteres de control no permitidos.');
+    }
+    if (trimmed.length > 256) {
+      throw ArgumentError.value(
+          trimmed, fieldName, 'El valor es demasiado largo.');
     }
     return trimmed;
   }

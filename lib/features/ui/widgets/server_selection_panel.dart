@@ -60,6 +60,7 @@ class ServerSelectionPanel extends StatelessWidget {
                       final preset = controller.presetById(value);
                       if (preset == null) return;
                       if (!preset.isConfigured) {
+                        controller.preferMostStableServer = false;
                         controller.selectedServerPresetId = value;
                         controller.setGuidance(
                           'Servidor pendiente de configuración',
@@ -71,6 +72,9 @@ class ServerSelectionPanel extends StatelessWidget {
                         );
                         return;
                       }
+                      // Elegir un servidor concreto desactiva la selección
+                      // automática para respetar la elección del usuario.
+                      controller.preferMostStableServer = false;
                       controller.applyServerPreset(preset);
                     },
             ),

@@ -2,6 +2,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
 
+/// Rutas que la aplicación agregó y que deben retirarse si el cierre
+/// anterior no pudo completar la limpieza.
+class PendingSplitTunnelCleanup {
+  const PendingSplitTunnelCleanup({
+    required this.subnets,
+    required this.gateway,
+    required this.interfaceName,
+  });
+
+  final List<String> subnets;
+  final String gateway;
+  final String interfaceName;
+}
+
 /// Persistent user settings for MedLink Connect.
 ///
 /// Non-sensitive data uses [SharedPreferences]. Sensitive fields
@@ -65,6 +79,55 @@ class SettingsStorage {
 
   String get wifiSsid => prefs.getString('wifiSsid') ?? '';
   set wifiSsid(String value) => prefs.setString('wifiSsid', value);
+
+  String get selectedServerPresetId =>
+      prefs.getString('selectedServerPresetId') ?? 'manual';
+  set selectedServerPresetId(String value) =>
+      prefs.setString('selectedServerPresetId', value);
+
+  bool get preferMostStableServer =>
+      prefs.getBool('preferMostStableServer') ?? true;
+  set preferMostStableServer(bool value) =>
+      prefs.setBool('preferMostStableServer', value);
+
+  PendingSplitTunnelCleanup? get pendingSplitTunnelCleanup {
+    final rawSubnets = prefs.getString('pendingSplitTunnelSubnets') ?? '';
+    final gateway = prefs.getString('pendingSplitTunnelGateway') ?? '';
+    final interfaceName = prefs.getString('pendingSplitTunnelInterface') ?? '';
+    final subnets = rawSubnets
+        .split('\n')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+    if (subnets.isEmpty || gateway.isEmpty || interfaceName.isEmpty) {
+      return null;
+    }
+    return PendingSplitTunnelCleanup(
+      subnets: subnets,
+      gateway: gateway,
+      interfaceName: interfaceName,
+    );
+  }
+
+  Future<void> setPendingSplitTunnelCleanup({
+    required List<String> subnets,
+    required String gateway,
+    required String interfaceName,
+  }) async {
+    await Future.wait([
+      prefs.setString('pendingSplitTunnelSubnets', subnets.join('\n')),
+      prefs.setString('pendingSplitTunnelGateway', gateway),
+      prefs.setString('pendingSplitTunnelInterface', interfaceName),
+    ]);
+  }
+
+  Future<void> clearPendingSplitTunnelCleanup() async {
+    await Future.wait([
+      prefs.remove('pendingSplitTunnelSubnets'),
+      prefs.remove('pendingSplitTunnelGateway'),
+      prefs.remove('pendingSplitTunnelInterface'),
+    ]);
+  }
 
   // --- Sensitive (FlutterSecureStorage — encrypted) ---
 

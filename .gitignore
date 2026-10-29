@@ -26,6 +26,11 @@ flutter_*.png
 dist/*/bundle/
 dist/**/*.deb
 dist/**/*.tar.gz
+dist/**/*.run
+dist/**/*.apk
+dist/**/*.aab
+dist/**/*.ipa
+dist/**/*.AppImage
 dist/**/*.dmg
 dist/**/*.pkg
 dist/**/*.exe

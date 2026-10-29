@@ -13,17 +13,22 @@ APP_DIR="$HOME/.local/share/medlink_connect"
 BIN_DIR="$HOME/.local/bin"
 DESKTOP_DIR="$HOME/.local/share/applications"
 
-echo "[1/3] Instalando archivos en $APP_DIR..."
-mkdir -p "$APP_DIR" "$BIN_DIR" "$DESKTOP_DIR"
-
-if [ -d "bundle" ]; then
-    cp -r bundle/* "$APP_DIR/"
-else
-    cp -r * "$APP_DIR/" 2>/dev/null || true
+if [ ! -x "bundle/medlink_connect" ]; then
+    echo "ERROR: Falta bundle/medlink_connect."
+    echo "Genera el paquete con scripts/build_linux.sh."
+    exit 1
 fi
 
-chmod +x "$APP_DIR/medlink_connect" 2>/dev/null || true
+echo "[1/3] Instalando archivos en $APP_DIR..."
+mkdir -p "$APP_DIR" "$BIN_DIR" "$DESKTOP_DIR"
+cp -a bundle/. "$APP_DIR/"
+chmod +x "$APP_DIR/medlink_connect"
 ln -sf "$APP_DIR/medlink_connect" "$BIN_DIR/medlink_connect"
+
+ICON_PATH="$APP_DIR/medlink_connect.png"
+if [ ! -f "$ICON_PATH" ]; then
+    ICON_PATH="network-wireless"
+fi
 
 echo "[2/3] Registrando aplicación en el menú del sistema (.desktop)..."
 cat << EOF > "$DESKTOP_DIR/medlink_connect.desktop"
@@ -32,10 +37,12 @@ Version=1.0
 Name=MedLink Connect
 Comment=Conexión segura RDP y Wi-Fi para redes hospitalarias
 Exec=$APP_DIR/medlink_connect
-Icon=$APP_DIR/data/flutter_assets/assets/icon.png
+TryExec=$APP_DIR/medlink_connect
+Icon=$ICON_PATH
 Terminal=false
 Type=Application
 Categories=Network;Utility;
+StartupWMClass=medlink_connect
 EOF
 
 chmod +x "$DESKTOP_DIR/medlink_connect.desktop"

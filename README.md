@@ -57,6 +57,23 @@ Ver `dist/Windows/README_WINDOWS.txt`. Generar bundle desde Windows con `flutter
 
 Los instaladores/binarios oficiales se publican en **GitHub Releases**.
 
+## Compilación en 1 clic
+
+Cada plataforma tiene un script que detecta Flutter, compila y deja los
+artefactos listos en `dist/`:
+
+| Plataforma | Comando / doble clic | Artefactos |
+|---|---|---|
+| Windows | `scripts\build_windows.bat` | bundle, ZIP portable, instalador Inno Setup |
+| Linux | `./scripts/build_linux.sh` | `.run` autoejecutable, `.tar.gz`, `.deb` |
+| Android | `./scripts/build_android.sh` o `scripts\build_android.bat` | `.apk`, `.aab` |
+| iOS (macOS) | `./scripts/build_ios.sh [--simulator\|--ipa]` | `.app.zip` o `.ipa` |
+| Mobile | `./scripts/build_mobile.sh` | Android + iOS si el host es macOS |
+
+Auditoría repetible: `./scripts/audit.sh` (o `scripts\audit.bat`).
+
+Detalles y requisitos por plataforma en `dist/README_INSTALADORES.md`.
+
 ## Desarrollo
 
 ```bash

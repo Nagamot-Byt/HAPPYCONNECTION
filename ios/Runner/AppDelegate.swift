@@ -67,76 +67,47 @@ fileprivate class NetworkDiagnosticsPlugin {
            let h = args["host"] as? String {
           host = h
         }
-        // NWConnection ping (ICMP-like: we connect to port 7 echo TCP,
-        // or fall back to UDP port 7 + measure. iOS 14+ has NWConnection that
-        // supports parameters for ICMP via .icmp type on NWParameters).
-        if #available(iOS 14.0, *) {
-          var params: NWParameters
-          // Use ICMP if possible (iOS 14+ on some devices); otherwise TCP 80 connect
-          do {
-            let icmp = try NWParameters.icmp()
-            params = icmp
-          } catch {
-            params = .tcp
-          }
-          let hostPort: NWEndpoint.Host = NWEndpoint.Host(host)
-          let port: NWEndpoint.Port = params == .tcp ? 80 : NWEndpoint.Port(rawValue: 7)!
-          let conn = NWConnection(host: hostPort, port: port, using: params)
-          let startTime = Date()
-          var didFire = false
-          let queue = DispatchQueue(label: "medlink.ping")
-          conn.stateUpdateHandler = { state in
-            guard !didFire else { return }
-            switch state {
-            case .ready:
-              let ms = Int(Date().timeIntervalSince(startTime) * 1000)
-              didFire = true
-              conn.cancel()
-              DispatchQueue.main.async { result(ms) }
-            case .failed, .cancelled:
-              if !didFire {
-                didFire = true
-                DispatchQueue.main.async {
-                  result(FlutterError(code: "inaccesible",
-                                      message: "Host inaccesible en iOS (puerto 7/80 cerrado o sin ruta).",
-                                      details: nil))
-                }
-              }
-            default: break
-            }
-          }
-          // Timeout 3s
-          queue.asyncAfter(deadline: .now() + 3) {
-            guard !didFire else { return }
+        // Network.framework does not expose raw ICMP to sandboxed apps.
+        // Probe the RDP port instead of an arbitrary web port so the result
+        // matches the service the app is actually trying to reach.
+        let probePort: UInt16 = 3389
+        let connection = NWConnection(
+          host: NWEndpoint.Host(host),
+          port: NWEndpoint.Port(rawValue: probePort)!,
+          using: .tcp
+        )
+        let startTime = Date()
+        var didFire = false
+        let queue = DispatchQueue(label: "medlink.ping")
+        connection.stateUpdateHandler = { state in
+          guard !didFire else { return }
+          switch state {
+          case .ready:
+            let ms = Int(Date().timeIntervalSince(startTime) * 1000)
             didFire = true
-            conn.cancel()
-            DispatchQueue.main.async {
-              result(FlutterError(code: "timeout", message: "Ping agotado 3s", details: nil))
-            }
-          }
-          conn.start(queue: queue)
-        } else {
-          // Legacy: use URLSession HEAD request timing
-          let urlStr = "https://\(host)"
-          guard let url = URL(string: urlStr) else {
-            result(FlutterError(code: "argumento_invalido", message: "Host no parseable", details: nil))
-            return
-          }
-          var req = URLRequest(url: url)
-          req.httpMethod = "HEAD"
-          req.timeoutInterval = 3
-          let start = Date()
-          URLSession.shared.dataTask(with: req) { _, resp, err in
-            let ms = Int(Date().timeIntervalSince(start) * 1000)
-            if err == nil && (resp as? HTTPURLResponse)?.statusCode ?? 0 < 500 {
-              DispatchQueue.main.async { result(ms) }
-            } else {
+            connection.cancel()
+            DispatchQueue.main.async { result(ms) }
+          case .failed, .cancelled:
+            if !didFire {
+              didFire = true
               DispatchQueue.main.async {
-                result(FlutterError(code: "inaccesible", message: "Host inaccesible", details: nil))
+                result(FlutterError(code: "inaccesible",
+                                    message: "Host inaccesible en iOS (TCP \(probePort) cerrado o sin ruta).",
+                                    details: nil))
               }
             }
-          }.resume()
+          default: break
+          }
         }
+        queue.asyncAfter(deadline: .now() + 3) {
+          guard !didFire else { return }
+          didFire = true
+          connection.cancel()
+          DispatchQueue.main.async {
+            result(FlutterError(code: "timeout", message: "Prueba TCP \(probePort) agotada 3s", details: nil))
+          }
+        }
+        connection.start(queue: queue)
 
       case "checkTcpPort":
         guard let args = call.arguments as? [String: Any],
@@ -372,16 +343,10 @@ fileprivate class RdpLauncherPlugin {
           uri = "ms-rd-web://" + percentEncode(host)
         } else {
           var authority = ""
-          var hasAuth = false
-          if !domain.isEmpty {
-            authority += percentEncode(domain) + "\\"
-            hasAuth = true
-          }
-          if !username.isEmpty {
-            authority += percentEncode(username)
-            hasAuth = true
-          }
-          if hasAuth { authority += "@" }
+          var userInfo = ""
+          if !domain.isEmpty { userInfo += domain + "\\" }
+          if !username.isEmpty { userInfo += username }
+          if !userInfo.isEmpty { authority += percentEncode(userInfo) + "@" }
           authority += "\(percentEncode(host)):\(port)"
           uri = "rdp://" + authority
         }

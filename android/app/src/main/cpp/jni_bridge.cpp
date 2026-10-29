@@ -1,5 +1,5 @@
 #include <jni.h>
-#include "../../../../../../../native/bridge/engine_bridge.h"
+#include "../../../../../native/bridge/engine_bridge.h"
 
 extern "C" JNIEXPORT jlong JNICALL
 Java_com_medlinkconnect_medlink_1connect_rdp_RdpBridge_nativeCreate(JNIEnv*, jobject) {

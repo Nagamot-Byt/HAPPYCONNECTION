@@ -1,5 +1,5 @@
 #import "RdpBridge.h"
-#include "../../../../../native/bridge/engine_bridge.h"
+#include "../../../native/bridge/engine_bridge.h"
 
 @implementation RdpBridge
 - (void)connect {

@@ -2,6 +2,7 @@ package com.medlinkconnect.medlink_connect
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
@@ -35,6 +36,13 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL_RDP = "com.medlinkconnect/rdp_launcher"
 
     private var trackedRoutes: MutableList<String> = mutableListOf()
+
+    private val safeHost = Regex("^[A-Za-z0-9._:%-]+$")
+    private val safeInterface = Regex("^[A-Za-z0-9_.:-]+$")
+    private val safeCidr = Regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}(/[0-9]{1,2})?$")
+
+    private fun isSafeIpv4(value: String): Boolean =
+        Regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$").matches(value)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -77,7 +85,12 @@ class MainActivity : FlutterActivity() {
                         result.error("argumento_invalido", "Falta destinationCidr", null)
                         return@setMethodCallHandler
                     }
-                    handleRemoveRoute(dest, result)
+                    handleRemoveRoute(
+                        dest,
+                        call.argument<String>("gateway") ?: "",
+                        call.argument<String>("interfaceName") ?: "",
+                        result
+                    )
                 }
                 "enableSplitTunnel" -> {
                     val subnets = call.argument<List<String>>("hospitalSubnets")
@@ -187,6 +200,10 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handlePing(host: String, result: MethodChannel.Result) {
+        if (!safeHost.matches(host)) {
+            result.error("argumento_invalido", "Host contiene caracteres no permitidos", null)
+            return
+        }
         CoroutineScope(Dispatchers.IO).launch {
             // Try 1: Java InetAddress isReachable (needs ICMP, often uses echo TCP/7)
             val javaPing = try {
@@ -264,6 +281,10 @@ class MainActivity : FlutterActivity() {
     // Route Manager
     // ============================================================
     private fun handleAddRoute(dest: String, gw: String, iface: String, result: MethodChannel.Result) {
+        if (!safeCidr.matches(dest) || !isSafeIpv4(gw) || !safeInterface.matches(iface)) {
+            result.error("argumento_invalido", "Parámetros de ruta inválidos", null)
+            return
+        }
         CoroutineScope(Dispatchers.IO).launch {
             if (!isUptimeAsRoot()) {
                 withContext(Dispatchers.Main) {
@@ -291,14 +312,38 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun handleRemoveRoute(dest: String, result: MethodChannel.Result) {
+    private fun handleRemoveRoute(
+        dest: String,
+        gw: String,
+        iface: String,
+        result: MethodChannel.Result
+    ) {
+        if (!safeCidr.matches(dest)) {
+            result.error("argumento_invalido", "CIDR inválido", null)
+            return
+        }
+        if ((gw.isNotEmpty() && !isSafeIpv4(gw)) ||
+            (iface.isNotEmpty() && !safeInterface.matches(iface))
+        ) {
+            result.error("argumento_invalido", "Gateway o interfaz inválidos", null)
+            return
+        }
+        val exact = gw.isNotEmpty() && iface.isNotEmpty()
         CoroutineScope(Dispatchers.IO).launch {
-            val r = runShell("su -c 'ip route del $dest' 2>&1")
-            if (r.first != 0) {
-                val r2 = runShell("su -c 'route del -net $dest' 2>&1")
-                if (r2.first != 0) {
+            val primary = if (exact) {
+                runShell("su -c 'ip route del $dest via $gw dev $iface' 2>&1")
+            } else {
+                runShell("su -c 'ip route del $dest' 2>&1")
+            }
+            if (primary.first != 0) {
+                val fallback = runShell("su -c 'route del -net $dest' 2>&1")
+                if (fallback.first != 0) {
                     withContext(Dispatchers.Main) {
-                        result.error("error_comando", "Error al eliminar ruta: ${r.second.ifBlank { r2.second }}", null)
+                        result.error(
+                            "error_comando",
+                            "Error al eliminar ruta: ${primary.second.ifBlank { fallback.second }}",
+                            null
+                        )
                     }
                     return@launch
                 }
@@ -311,6 +356,11 @@ class MainActivity : FlutterActivity() {
         subnets: List<String>, gw: String, iface: String,
         result: MethodChannel.Result
     ) {
+        if (!isSafeIpv4(gw) || !safeInterface.matches(iface) ||
+            subnets.any { !safeCidr.matches(it.trim()) }) {
+            result.error("argumento_invalido", "Parámetros de túnel inválidos", null)
+            return
+        }
         CoroutineScope(Dispatchers.IO).launch {
             if (!isUptimeAsRoot()) {
                 withContext(Dispatchers.Main) {
@@ -352,7 +402,6 @@ class MainActivity : FlutterActivity() {
     private fun handleDisableSplit(result: MethodChannel.Result) {
         CoroutineScope(Dispatchers.IO).launch {
             val current = ArrayList(trackedRoutes)
-            trackedRoutes.clear()
             if (current.isEmpty()) {
                 withContext(Dispatchers.Main) {
                     result.success("No hay rutas de túnel dividido activas.")
@@ -360,11 +409,26 @@ class MainActivity : FlutterActivity() {
                 return@launch
             }
             val msgs = mutableListOf<String>()
+            val failed = mutableListOf<String>()
             for (dest in current) {
-                val r = runShell("su -c 'ip route del $dest' 2>&1 || true")
-                msgs.add(if (r.first == 0) "Ruta $dest eliminada." else "Error al eliminar $dest: ${r.second.take(120)}")
+                val r = runShell("su -c 'ip route del $dest' 2>&1")
+                val alreadyGone = r.second.contains("no such process", ignoreCase = true)
+                if (r.first == 0 || alreadyGone) {
+                    msgs.add("Ruta $dest eliminada.")
+                } else {
+                    failed.add(dest)
+                    msgs.add("Error al eliminar $dest: ${r.second.take(120)}")
+                }
             }
-            withContext(Dispatchers.Main) { result.success(msgs.joinToString(" ")) }
+            trackedRoutes.clear()
+            trackedRoutes.addAll(failed)
+            withContext(Dispatchers.Main) {
+                if (failed.isEmpty()) {
+                    result.success(msgs.joinToString(" "))
+                } else {
+                    result.error("error_comando", msgs.joinToString(" "), null)
+                }
+            }
         }
     }
 
@@ -442,32 +506,20 @@ class MainActivity : FlutterActivity() {
     // ============================================================
     // RDP Launcher
     // ============================================================
-    private fun handlePreLaunch(result: MethodChannel.Result) {
-        // Known packages that handle RDP URIs
-        val knownPkgs = listOf(
-            "com.microsoft.rdc.android",
-            "com.microsoft.rdc.android.beta",
-            "com.microsoft.rdc.internal",
-            "net.remmina",
-            "ch.cern.rdp"
-        )
-        for (pkg in knownPkgs) {
-            try {
-                packageManager.getPackageInfo(pkg, 0)
-                result.success(true)
-                return
-            } catch (_: PackageManager.NameNotFoundException) { }
-        }
-        // Fallback: can we resolve Intent rdp:// ?
-        val testIntent = Intent(Intent.ACTION_VIEW, Uri.parse("rdp://example.com:3389"))
+    private fun externalRdpHandlers(intent: Intent): List<ResolveInfo> {
         val matches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.queryIntentActivities(testIntent,
+            packageManager.queryIntentActivities(intent,
                 PackageManager.ResolveInfoFlags.of(0))
         } else {
             @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(testIntent, 0)
+            packageManager.queryIntentActivities(intent, 0)
         }
-        if (matches.isNotEmpty()) {
+        return matches.filter { it.activityInfo.packageName != packageName }
+    }
+
+    private fun handlePreLaunch(result: MethodChannel.Result) {
+        val testIntent = Intent(Intent.ACTION_VIEW, Uri.parse("rdp://example.com:3389"))
+        if (externalRdpHandlers(testIntent).isNotEmpty()) {
             result.success(true)
             return
         }
@@ -476,30 +528,8 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handleRdpAvailable(result: MethodChannel.Result) {
-        // Same as preLaunch but returns bool, no error
-        val knownPkgs = listOf(
-            "com.microsoft.rdc.android",
-            "com.microsoft.rdc.android.beta",
-            "com.microsoft.rdc.internal",
-            "net.remmina",
-            "ch.cern.rdp"
-        )
-        for (pkg in knownPkgs) {
-            try {
-                packageManager.getPackageInfo(pkg, 0)
-                result.success(true)
-                return
-            } catch (_: PackageManager.NameNotFoundException) { }
-        }
         val testIntent = Intent(Intent.ACTION_VIEW, Uri.parse("rdp://example.com:3389"))
-        val matches = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.queryIntentActivities(testIntent,
-                PackageManager.ResolveInfoFlags.of(0))
-        } else {
-            @Suppress("DEPRECATION")
-            packageManager.queryIntentActivities(testIntent, 0)
-        }
-        result.success(matches.isNotEmpty())
+        result.success(externalRdpHandlers(testIntent).isNotEmpty())
     }
 
     private fun handleLaunchRdp(
@@ -516,23 +546,32 @@ class MainActivity : FlutterActivity() {
                 append("ms-rd-web://${percentEncode(host)}")
             } else {
                 append("rdp://")
-                var hasAuth = false
-                if (domain.isNotBlank()) {
-                    append(percentEncode(domain)).append("\\")
-                    hasAuth = true
+                val userInfo = buildString {
+                    if (domain.isNotBlank()) append(domain).append('\\')
+                    if (username.isNotBlank()) append(username)
                 }
-                if (username.isNotBlank()) {
-                    append(percentEncode(username))
-                    hasAuth = true
+                if (userInfo.isNotEmpty()) {
+                    append(percentEncode(userInfo)).append("@")
                 }
-                if (hasAuth) append("@")
                 append("${percentEncode(host)}:$port")
             }
         }
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val handlers = externalRdpHandlers(intent)
+        if (handlers.isEmpty()) {
+            result.error("sin_manejador_rdp",
+                "Instala Microsoft Remote Desktop (o cliente RDP) desde Play Store.", null)
+            return
+        }
+        val launchIntent = if (handlers.size == 1) {
+            Intent(intent).setPackage(handlers.first().activityInfo.packageName)
+        } else {
+            Intent.createChooser(intent, "Selecciona cliente RDP")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
         try {
-            startActivity(intent)
+            startActivity(launchIntent)
             result.success("Conexión RDP lanzada a $host:$port correctamente.")
         } catch (t: Throwable) {
             result.error("lanzamiento_fallido",

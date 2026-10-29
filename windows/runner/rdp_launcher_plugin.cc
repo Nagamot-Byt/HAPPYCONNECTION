@@ -10,6 +10,8 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <thread>
+#include <chrono>
 
 #include "utils.h"
 
@@ -69,15 +71,44 @@ static bool UriSchemeRegistered(const std::wstring& scheme) {
 
 struct LaunchStatus {
   bool started = false;
-  bool running_after_grace_period = false;
   DWORD win_error = ERROR_SUCCESS;
-  DWORD process_exit_code = STILL_ACTIVE;
+  HANDLE process = nullptr;
 };
 
 static void BestEffortDeleteFile(const std::wstring& path) {
   if (!path.empty()) {
     DeleteFileW(path.c_str());
   }
+}
+
+static void CleanupStaleRdpFiles(const std::wstring& temp_dir) {
+  const std::wstring pattern = temp_dir + L"medlink_connect_*.rdp";
+  WIN32_FIND_DATAW data{};
+  HANDLE find = FindFirstFileW(pattern.c_str(), &data);
+  if (find == INVALID_HANDLE_VALUE) return;
+  do {
+    if ((data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
+      const std::wstring full_path = temp_dir + data.cFileName;
+      DeleteFileW(full_path.c_str());
+    }
+  } while (FindNextFileW(find, &data));
+  FindClose(find);
+}
+
+static void DeleteFileAfterProcessExit(HANDLE process,
+                                       const std::wstring& path) {
+  std::thread([process, path]() {
+    if (process != nullptr) {
+      WaitForSingleObject(process, INFINITE);
+    }
+    for (int attempt = 0; attempt < 20; ++attempt) {
+      if (DeleteFileW(path.c_str())) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+    if (process != nullptr) {
+      CloseHandle(process);
+    }
+  }).detach();
 }
 
 static LaunchStatus LaunchProcess(const std::wstring& command_line) {
@@ -97,16 +128,8 @@ static LaunchStatus LaunchProcess(const std::wstring& command_line) {
   }
 
   status.started = true;
-  WaitForInputIdle(pi.hProcess, 1500);
-  const DWORD wait_result = WaitForSingleObject(pi.hProcess, 1200);
-  if (wait_result == WAIT_TIMEOUT) {
-    status.running_after_grace_period = true;
-  } else {
-    GetExitCodeProcess(pi.hProcess, &status.process_exit_code);
-  }
-
+  status.process = pi.hProcess;
   CloseHandle(pi.hThread);
-  CloseHandle(pi.hProcess);
   return status;
 }
 
@@ -120,6 +143,13 @@ static RdpProfile ParseRdpProfile(const std::string& value) {
   if (value == "stable") return RdpProfile::kStable;
   if (value == "speed") return RdpProfile::kSpeed;
   return RdpProfile::kAdaptive;
+}
+
+static bool IsSafeRdpValue(const std::wstring& value) {
+  for (wchar_t c : value) {
+    if (c == L'\r' || c == L'\n' || c == L'\0') return false;
+  }
+  return true;
 }
 
 static bool WriteOptimizedRdpFile(const std::wstring& path,
@@ -192,9 +222,9 @@ static bool WriteOptimizedRdpFile(const std::wstring& path,
     return false;
   }
 
-  fwrite(content_u8.data(), 1, content_u8.size(), f);
-  fclose(f);
-  return true;
+  const size_t written = fwrite(content_u8.data(), 1, content_u8.size(), f);
+  const int close_result = fclose(f);
+  return written == content_u8.size() && close_result == 0;
 }
 
 // ------------------------------------------------------------------
@@ -300,6 +330,13 @@ static std::unique_ptr<EncodableValue> HandleLaunchRdp(
     return std::make_unique<EncodableValue>(ErrPair(
         "argumento_invalido", "Puerto RDP inválido"));
   }
+  if (!IsSafeRdpValue(U8ToW(host_u8)) ||
+      !IsSafeRdpValue(U8ToW(username_u8)) ||
+      !IsSafeRdpValue(U8ToW(domain_u8))) {
+    return std::make_unique<EncodableValue>(ErrPair(
+        "argumento_invalido",
+        "El host, usuario o dominio contiene caracteres no permitidos."));
+  }
 
   std::wstring uri;
   if (use_webfeed) {
@@ -307,16 +344,12 @@ static std::unique_ptr<EncodableValue> HandleLaunchRdp(
   } else {
     uri = L"rdp://";
     std::wstring authority;
-    bool has_auth = false;
-    if (!domain_u8.empty()) {
-      authority += PercentEncode(U8ToW(domain_u8)) + L"\\";
-      has_auth = true;
+    std::string user_info_u8;
+    if (!domain_u8.empty()) user_info_u8 += domain_u8 + "\\";
+    if (!username_u8.empty()) user_info_u8 += username_u8;
+    if (!user_info_u8.empty()) {
+      authority += PercentEncode(U8ToW(user_info_u8)) + L"@";
     }
-    if (!username_u8.empty()) {
-      authority += PercentEncode(U8ToW(username_u8));
-      has_auth = true;
-    }
-    if (has_auth) authority += L"@";
     authority += PercentEncode(U8ToW(host_u8)) + L":" +
                  std::to_wstring(port);
     uri += authority;
@@ -327,6 +360,7 @@ static std::unique_ptr<EncodableValue> HandleLaunchRdp(
       wchar_t tmp_path[MAX_PATH + 1]{};
       const DWORD len = GetTempPathW(MAX_PATH, tmp_path);
       if (len > 0) {
+        CleanupStaleRdpFiles(std::wstring(tmp_path));
         const std::wstring rdp_file =
             std::wstring(tmp_path) + L"medlink_connect_" +
             std::to_wstring(GetCurrentProcessId()) + L"_" +
@@ -340,41 +374,33 @@ static std::unique_ptr<EncodableValue> HandleLaunchRdp(
           const std::wstring command_line =
               L"mstsc.exe \"" + rdp_file + L"\" /public";
           const auto launch = LaunchProcess(command_line);
-          // No borrar inmediatamente para dar tiempo a mstsc a leer el archivo
           if (launch.started) {
+            DeleteFileAfterProcessExit(launch.process, rdp_file);
             return std::make_unique<EncodableValue>(
                 "Conexión RDP lanzada a " + host_u8 + ":" +
                 std::to_string(port) + " (perfil " + profile_u8 + ").");
           }
           BestEffortDeleteFile(rdp_file);
           const std::string msg =
-              !launch.started
-                  ? "No se pudo iniciar mstsc con el perfil optimizado. Código " +
-                        std::to_string(static_cast<int>(launch.win_error))
-                  : "mstsc se cerró demasiado rápido al abrir el perfil optimizado. Código de salida " +
-                        std::to_string(static_cast<int>(launch.process_exit_code));
+              "No se pudo iniciar mstsc con el perfil optimizado. Código " +
+              std::to_string(static_cast<int>(launch.win_error));
           return std::make_unique<EncodableValue>(
               ErrPair("lanzamiento_fallido", msg));
         }
-          // Borrado diferido
-        Sleep(2000);
-          BestEffortDeleteFile(rdp_file);
-        }
+        BestEffortDeleteFile(rdp_file);
 
         const std::wstring mstsc_args =
             L"mstsc.exe /v:" + U8ToW(host_u8) + L":" + std::to_wstring(port) + L" /public";
         const auto launch = LaunchProcess(mstsc_args);
         if (launch.started) {
+          if (launch.process != nullptr) CloseHandle(launch.process);
           return std::make_unique<EncodableValue>(
               "Conexión RDP lanzada a " + host_u8 + ":" +
               std::to_string(port) + " (mstsc).");
         }
         const std::string msg =
-            !launch.started
-                ? "No se pudo iniciar mstsc.exe. Código " +
-                      std::to_string(static_cast<int>(launch.win_error))
-                : "mstsc se cerró demasiado rápido. Código de salida " +
-                      std::to_string(static_cast<int>(launch.process_exit_code));
+            "No se pudo iniciar mstsc.exe. Código " +
+            std::to_string(static_cast<int>(launch.win_error));
         return std::make_unique<EncodableValue>(
             ErrPair("lanzamiento_fallido", msg));
     }

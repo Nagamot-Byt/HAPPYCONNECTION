@@ -1,9 +1,5 @@
 #include "network_diagnostics_plugin.h"
 
-#include <flutter/method_channel.h>
-#include <flutter/plugin_registrar.h>
-#include <flutter/standard_method_codec.h>
-
 #include <glib.h>
 #include <gio/gio.h>
 #include <stdio.h>
@@ -16,34 +12,10 @@
 #include <errno.h>
 #include <unistd.h>
 
-/* ------------------------------------------------------------------ */
-/*  Helper: run a command synchronously and capture stdout / stderr    */
-/* ------------------------------------------------------------------ */
-static gboolean run_command(const gchar* cmd,
-                            gchar**   stdout_out,
-                            gchar**   stderr_out,
-                            gint*     exit_code) {
-  g_autoptr(GError) error = NULL;
-  gboolean ok = g_spawn_command_line_sync(
-      cmd,
-      stdout_out,
-      stderr_out,
-      exit_code,
-      &error);
-  if (!ok) {
-    if (stdout_out) *stdout_out = NULL;
-    if (stderr_out) *stderr_out = g_strdup(error->message);
-    if (exit_code)  *exit_code = -1;
-  }
-  return ok;
-}
+#include "async_method_call.h"
+#include "process_utils.h"
 
-/* ------------------------------------------------------------------ */
-/*  Helper: check whether the current process runs as root             */
-/* ------------------------------------------------------------------ */
-static gboolean is_root() {
-  return geteuid() == 0;
-}
+#include <string>
 
 /* ------------------------------------------------------------------ */
 /*  flushDns                                                            */
@@ -57,7 +29,7 @@ static FlMethodResponse* handle_flush_dns() {
   g_autoptr(GString) msg = g_string_new("");
 
   // Try resolvectl first
-  if (run_command("resolvectl flush-caches 2>&1", &out, &err, &exit_code) &&
+  if (run_program({"resolvectl", "flush-caches"}, &out, &err, &exit_code) &&
       exit_code == 0) {
     g_string_append(msg, "DNS cache flushed via resolvectl.");
     return FL_METHOD_RESPONSE(fl_method_success_response_new(
@@ -69,7 +41,8 @@ static FlMethodResponse* handle_flush_dns() {
   // Fallback to systemd-resolve
   g_free(out); out = NULL;
   g_free(err); err = NULL;
-  if (run_command("systemd-resolve --flush-caches 2>&1", &out, &err, &exit_code) &&
+  if (run_program({"systemd-resolve", "--flush-caches"}, &out, &err,
+                  &exit_code) &&
       exit_code == 0) {
     g_string_append(msg, ". DNS cache flushed via systemd-resolve.");
     return FL_METHOD_RESPONSE(fl_method_success_response_new(
@@ -81,7 +54,8 @@ static FlMethodResponse* handle_flush_dns() {
   // Fallback to nscd restart
   g_free(out); out = NULL;
   g_free(err); err = NULL;
-  if (run_command("/etc/init.d/nscd restart 2>&1", &out, &err, &exit_code) &&
+  if (run_privileged({"/etc/init.d/nscd", "restart"}, &out, &err,
+                     &exit_code) &&
       exit_code == 0) {
     g_string_append(msg, ". DNS cache flushed via nscd restart.");
     return FL_METHOD_RESPONSE(fl_method_success_response_new(
@@ -99,18 +73,12 @@ static FlMethodResponse* handle_flush_dns() {
 /*  clearNetworkCaches                                                  */
 /* ------------------------------------------------------------------ */
 static FlMethodResponse* handle_clear_network_caches() {
-  if (!is_root()) {
-    g_autofree gchar* err = g_strdup(
-        "Se requieren privilegios de administrador para limpiar la caché ARP.");
-    return FL_METHOD_RESPONSE(fl_method_error_response_new(
-        "permiso_denegado", err, nullptr));
-  }
-
   g_autofree gchar* out = NULL;
   g_autofree gchar* err = NULL;
   gint exit_code = 0;
 
-  if (!run_command("sudo ip neigh flush all 2>&1", &out, &err, &exit_code)) {
+  if (!run_privileged({"ip", "neigh", "flush", "all"}, &out, &err,
+                      &exit_code)) {
     return FL_METHOD_RESPONSE(fl_method_error_response_new(
         "error_comando",
         err ? err : "Error al ejecutar ip neigh flush all",
@@ -144,13 +112,12 @@ static FlMethodResponse* handle_ping(const gchar* host) {
     }
   }
 
-  g_autofree gchar* cmd = g_strdup_printf(
-      "ping -c 4 -W 2 %s 2>&1", host);
   g_autofree gchar* out = NULL;
   g_autofree gchar* err = NULL;
   gint exit_code = 0;
 
-  if (!run_command(cmd, &out, &err, &exit_code)) {
+  if (!run_program({"ping", "-c", "4", "-W", "2", host}, &out, &err,
+                   &exit_code)) {
     return FL_METHOD_RESPONSE(fl_method_error_response_new(
         "inaccesible",
         err ? err : "No se pudo ejecutar ping",
@@ -275,38 +242,33 @@ static void method_call_handler(
   const gchar* method = fl_method_call_get_name(method_call);
 
   if (g_strcmp0(method, "flushDns") == 0) {
-    FlMethodResponse* resp = handle_flush_dns();
-    fl_method_call_respond(method_call, resp, NULL);
-    g_object_unref(resp);
+    respond_async(method_call, [] { return handle_flush_dns(); });
     return;
   }
 
   if (g_strcmp0(method, "clearNetworkCaches") == 0) {
-    FlMethodResponse* resp = handle_clear_network_caches();
-    fl_method_call_respond(method_call, resp, NULL);
-    g_object_unref(resp);
+    respond_async(method_call, [] { return handle_clear_network_caches(); });
     return;
   }
 
   if (g_strcmp0(method, "ping") == 0) {
+    std::string host;
     FlValue* args = fl_method_call_get_args(method_call);
-    const gchar* host = NULL;
     if (args && fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
       FlValue* host_val = fl_value_lookup_string(args, "host");
       if (host_val && fl_value_get_type(host_val) == FL_VALUE_TYPE_STRING) {
         host = fl_value_get_string(host_val);
       }
     }
-    FlMethodResponse* resp = handle_ping(host);
-    fl_method_call_respond(method_call, resp, NULL);
-    g_object_unref(resp);
+    respond_async(method_call,
+                  [host] { return handle_ping(host.c_str()); });
     return;
   }
 
   if (g_strcmp0(method, "checkTcpPort") == 0) {
-    FlValue* args = fl_method_call_get_args(method_call);
-    const gchar* host = NULL;
+    std::string host;
     gint port = 0;
+    FlValue* args = fl_method_call_get_args(method_call);
     if (args && fl_value_get_type(args) == FL_VALUE_TYPE_MAP) {
       FlValue* host_val = fl_value_lookup_string(args, "host");
       FlValue* port_val = fl_value_lookup_string(args, "port");
@@ -317,9 +279,8 @@ static void method_call_handler(
         port = fl_value_get_int(port_val);
       }
     }
-    FlMethodResponse* resp = handle_check_tcp_port(host, port);
-    fl_method_call_respond(method_call, resp, NULL);
-    g_object_unref(resp);
+    respond_async(method_call,
+                  [host, port] { return handle_check_tcp_port(host.c_str(), port); });
     return;
   }
 

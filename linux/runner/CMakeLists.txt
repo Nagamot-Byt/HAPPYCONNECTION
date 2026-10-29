@@ -9,6 +9,11 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"
+  "async_method_call.cc"
+  "process_utils.cc"
+  "route_manager_plugin.cc"
+  "rdp_launcher_plugin.cc"
+  "network_diagnostics_plugin.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 

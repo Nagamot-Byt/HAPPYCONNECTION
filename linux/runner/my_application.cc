@@ -6,6 +6,9 @@
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+#include "network_diagnostics_plugin.h"
+#include "rdp_launcher_plugin.h"
+#include "route_manager_plugin.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -57,7 +60,17 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
-  fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  FlPluginRegistry* registry = FL_PLUGIN_REGISTRY(view);
+  fl_register_plugins(registry);
+  route_manager_plugin_register_with_registrar(
+      fl_plugin_registry_get_registrar_for_plugin(registry,
+                                                  "MedLinkRouteManager"));
+  rdp_launcher_plugin_register_with_registrar(
+      fl_plugin_registry_get_registrar_for_plugin(registry,
+                                                  "MedLinkRdpLauncher"));
+  network_diagnostics_plugin_register_with_registrar(
+      fl_plugin_registry_get_registrar_for_plugin(
+          registry, "MedLinkNetworkDiagnostics"));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

@@ -1,7 +1,11 @@
 #include "wifi_manager_plugin.h"
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <wlanapi.h>
+#include <iphlpapi.h>
+#include <netioapi.h>
 #include <objbase.h>
 #include <wtypes.h>
 
@@ -15,6 +19,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <climits>
 #include <vector>
 #include <thread>
 #include <memory>
@@ -129,6 +134,45 @@ class WlanHandle {
 // ------------------------------------------------------------------
 //  GetCurrentInfo
 // ------------------------------------------------------------------
+
+static std::wstring InterfaceAliasFromGuid(const GUID& guid) {
+  NET_LUID luid;
+  if (ConvertInterfaceGuidToLuid(&guid, &luid) != NO_ERROR) return L"";
+  wchar_t buffer[IF_MAX_STRING_SIZE + 1] = {0};
+  if (ConvertInterfaceLuidToAlias(&luid, buffer, IF_MAX_STRING_SIZE + 1) !=
+      NO_ERROR) {
+    return L"";
+  }
+  return buffer;
+}
+
+static std::string DefaultGatewayForLuid(NET_LUID luid) {
+  PMIB_IPFORWARD_TABLE2 table = nullptr;
+  if (GetIpForwardTable2(AF_INET, &table) != NO_ERROR) return "";
+
+  ULONG best_metric = ULONG_MAX;
+  SOCKADDR_INET best_next_hop{};
+  bool found = false;
+  for (ULONG i = 0; i < table->NumEntries; ++i) {
+    const auto& row = table->Table[i];
+    if (row.InterfaceLuid.Value != luid.Value) continue;
+    if (row.DestinationPrefix.PrefixLength != 0) continue;
+    if (row.NextHop.Ipv4.sin_family != AF_INET) continue;
+    if (row.NextHop.Ipv4.sin_addr.S_un.S_addr == 0) continue;
+    if (!found || row.Metric < best_metric) {
+      found = true;
+      best_metric = row.Metric;
+      best_next_hop = row.NextHop;
+    }
+  }
+  FreeMibTable(table);
+
+  if (!found) return "";
+  char buffer[INET_ADDRSTRLEN] = {0};
+  inet_ntop(AF_INET, &best_next_hop.Ipv4.sin_addr, buffer, INET_ADDRSTRLEN);
+  return buffer;
+}
+
 static EncodableMap GetCurrentInfoMapNative() {
   EncodableMap out;
   out[EncodableValue("ssid")] = EncodableValue("");
@@ -146,7 +190,17 @@ static EncodableMap GetCurrentInfoMapNative() {
   for (DWORD i = 0; i < pIfList->dwNumberOfItems; i++) {
     PWLAN_INTERFACE_INFO pIfInfo = (PWLAN_INTERFACE_INFO)&pIfList->InterfaceInfo[i];
     if (pIfInfo->isState == wlan_interface_state_connected) {
-      out[EncodableValue("interfaceName")] = EncodableValue(WToU8(pIfInfo->strInterfaceDescription));
+      const std::wstring alias = InterfaceAliasFromGuid(pIfInfo->InterfaceGuid);
+      out[EncodableValue("interfaceName")] = EncodableValue(WToU8(
+          alias.empty() ? std::wstring(pIfInfo->strInterfaceDescription)
+                        : alias));
+
+      NET_LUID luid{};
+      if (ConvertInterfaceGuidToLuid(&pIfInfo->InterfaceGuid, &luid) ==
+          NO_ERROR) {
+        out[EncodableValue("gateway")] =
+            EncodableValue(DefaultGatewayForLuid(luid));
+      }
 
       DWORD connectInfoSize = 0;
       PWLAN_CONNECTION_ATTRIBUTES* pConnectInfo = NULL;
@@ -258,6 +312,12 @@ static void HandleConnect(const EncodableValue* args, MethodResultPtr result) {
     }
 
     GUID interfaceGuid = pIfList->InterfaceInfo[0].InterfaceGuid;
+    for (DWORD i = 0; i < pIfList->dwNumberOfItems; ++i) {
+      if (pIfList->InterfaceInfo[i].isState == wlan_interface_state_connected) {
+        interfaceGuid = pIfList->InterfaceInfo[i].InterfaceGuid;
+        break;
+      }
+    }
     WlanFreeMemory(pIfList);
 
     std::wstring profile_note;
@@ -266,7 +326,7 @@ static void HandleConnect(const EncodableValue* args, MethodResultPtr result) {
     if (!password.empty()) {
       std::wstring profileXml = BuildWpa2ProfileXml(wssid, U8ToW(password));
       DWORD reasonCode = 0;
-      if (WlanSetProfile(wlan.get(), &interfaceGuid, 0, profileXml.c_str(), NULL, TRUE, NULL, &reasonCode) != ERROR_SUCCESS) {
+      if (WlanSetProfile(wlan.get(), &interfaceGuid, 0, profileXml.c_str(), NULL, FALSE, NULL, &reasonCode) != ERROR_SUCCESS) {
         if (reasonCode == WLAN_REASON_CODE_PROFILE_ALREADY_EXISTS) {
           profile_note = L"Ya existía un perfil Wi-Fi para \"" + wssid + L"\". Se reutilizará el perfil guardado.";
         } else {
@@ -296,7 +356,7 @@ static void HandleConnect(const EncodableValue* args, MethodResultPtr result) {
           L"\n  </MSM>"
           L"\n</WLANProfile>\n";
       DWORD reasonCodeOpen = 0;
-      WlanSetProfile(wlan.get(), &interfaceGuid, 0, openXml.c_str(), NULL, TRUE, NULL, &reasonCodeOpen);
+      WlanSetProfile(wlan.get(), &interfaceGuid, 0, openXml.c_str(), NULL, FALSE, NULL, &reasonCodeOpen);
       profile_note = L"Red abierta. Se intentará conectar sin credenciales.";
     }
 

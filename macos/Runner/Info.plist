@@ -28,20 +28,6 @@
     <string>MainMenu</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeRole</key>
-            <string>Viewer</string>
-            <key>CFBundleURLName</key>
-            <string>com.medlinkconnect</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>rdp</string>
-                <string>ms-rd-web</string>
-            </array>
-        </dict>
-    </array>
     <key>LSApplicationQueriesSchemes</key>
     <array>
         <string>rdp</string>

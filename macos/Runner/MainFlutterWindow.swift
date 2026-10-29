@@ -32,6 +32,26 @@ func isRootOrAdmin() -> Bool {
   return r.exitCode == 0
 }
 
+func matches(_ value: String, _ pattern: String) -> Bool {
+  return value.range(of: pattern, options: .regularExpression) != nil
+}
+
+func isSafeHost(_ value: String) -> Bool {
+  return matches(value, "^[A-Za-z0-9._:%-]+$")
+}
+
+func isSafeCIDR(_ value: String) -> Bool {
+  return matches(value, "^[0-9]{1,3}(\\.[0-9]{1,3}){3}(/[0-9]{1,2})?$")
+}
+
+func isSafeIPv4(_ value: String) -> Bool {
+  return matches(value, "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$")
+}
+
+func isSafeInterface(_ value: String) -> Bool {
+  return matches(value, "^[A-Za-z0-9_.:-]+$")
+}
+
 func utf8Encode(_ value: String) -> String {
   // Percent-encode URI components per RFC 3986 unreserved keep
   var allowed = CharacterSet.alphanumerics
@@ -49,30 +69,34 @@ class NetworkDiagnosticsPlugin {
     channel.setMethodCallHandler { call, result in
       switch call.method {
       case "flushDns":
-        // macOS: mDNSResponder + dscacheutil
-        let r1 = runShellSync("/usr/bin/dscacheutil -flushcache 2>&1")
-        let r2 = runShellSync("/usr/bin/killall -HUP mDNSResponder 2>&1 || /usr/bin/killall mDNSResponderHelper 2>&1 || true")
-        if r1.exitCode == 0 && (r2.exitCode == 0 || true) {
-          result("Caché DNS limpiada exitosamente (dscacheutil + mDNSResponder).")
-        } else {
-          result(FlutterError(code: "flushdns_error",
-                              message: "Error al limpiar caché DNS. Ejecuta con sudo.",
-                              details: nil))
+        DispatchQueue.global(qos: .userInitiated).async {
+          let r1 = runShellSync("/usr/bin/dscacheutil -flushcache 2>&1")
+          _ = runShellSync("/usr/bin/killall -HUP mDNSResponder 2>&1 || /usr/bin/killall mDNSResponderHelper 2>&1 || true")
+          let response: Any = r1.exitCode == 0
+            ? "Caché DNS limpiada exitosamente (dscacheutil + mDNSResponder)."
+            : FlutterError(code: "flushdns_error",
+                           message: "Error al limpiar caché DNS. Ejecuta con sudo.",
+                           details: nil)
+          DispatchQueue.main.async { result(response) }
         }
 
       case "clearNetworkCaches":
-        guard isRootOrAdmin() else {
-          result(FlutterError(code: "permiso_denegado",
-                              message: "Se requieren privilegios sudo para limpiar ARP.",
-                              details: nil))
-          return
+        DispatchQueue.global(qos: .userInitiated).async {
+          guard isRootOrAdmin() else {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "permiso_denegado",
+                                  message: "Se requieren privilegios sudo para limpiar ARP.",
+                                  details: nil))
+            }
+            return
+          }
+          let r1 = runShellSync("/sbin/route -n flush 2>&1 || true")
+          let r2 = runShellSync("/usr/sbin/arp -a -d 2>&1 || true")
+          var msg = ""
+          msg += "flush: " + (r1.exitCode == 0 ? "OK" : "fallido (\(r1.exitCode))")
+          msg += " | ARP clear: " + (r2.exitCode == 0 ? "OK" : "fallido (\(r2.exitCode))")
+          DispatchQueue.main.async { result(msg) }
         }
-        let r1 = runShellSync("/sbin/route -n flush 2>&1 || true")
-        let r2 = runShellSync("/usr/sbin/arp -a -d 2>&1 || true")
-        var msg = ""
-        msg += "flush: " + (r1.exitCode == 0 ? "OK" : "fallido (\(r1.exitCode))")
-        msg += " | ARP clear: " + (r2.exitCode == 0 ? "OK" : "fallido (\(r2.exitCode))")
-        result(msg)
 
       case "ping":
         var host = "8.8.8.8"
@@ -80,31 +104,45 @@ class NetworkDiagnosticsPlugin {
            let h = args["host"] as? String {
           host = h
         }
-        // Ping with 4 probes, wait 2s each.
-        let cmd = "/sbin/ping -c 4 -W 2000 \(host) 2>&1"
-        let r = runShellSync(cmd)
-        if r.exitCode != 0 {
-          result(FlutterError(code: "inaccesible",
-                              message: "Host inaccesible",
+        guard isSafeHost(host) else {
+          result(FlutterError(code: "argumento_invalido",
+                              message: "Host contiene caracteres no permitidos",
                               details: nil))
           return
         }
-        // Parse round-trip min/avg/max/stddev = X/Y/Z/W ms
-        let pattern = "round-trip min/avg/max/stddev = ([0-9.]+)/([0-9.]+)/([0-9.]+)/([0-9.]+) ms"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
-          result(FlutterError(code: "ping_error", message: "Respuesta inesperada", details: nil))
-          return
-        }
-        let nsrange = NSRange(r.output.startIndex..<r.output.endIndex, in: r.output)
-        if let match = regex.firstMatch(in: r.output, options: [], range: nsrange),
-           let avgRange = Range(match.range(at: 2), in: r.output) {
-          let avgStr = String(r.output[avgRange])
-          if let avg = Double(avgStr) {
-            result(Int(avg.rounded()))
+        // Ping with 4 probes, wait 2s each.
+        DispatchQueue.global(qos: .userInitiated).async {
+          let cmd = "/sbin/ping -c 4 -W 2000 \(host) 2>&1"
+          let r = runShellSync(cmd)
+          if r.exitCode != 0 {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "inaccesible",
+                                  message: "Host inaccesible",
+                                  details: nil))
+            }
             return
           }
+          // Parse round-trip min/avg/max/stddev = X/Y/Z/W ms
+          let pattern = "round-trip min/avg/max/stddev = ([0-9.]+)/([0-9.]+)/([0-9.]+)/([0-9.]+) ms"
+          guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "ping_error", message: "Respuesta inesperada", details: nil))
+            }
+            return
+          }
+          let nsrange = NSRange(r.output.startIndex..<r.output.endIndex, in: r.output)
+          if let match = regex.firstMatch(in: r.output, options: [], range: nsrange),
+             let avgRange = Range(match.range(at: 2), in: r.output) {
+            let avgStr = String(r.output[avgRange])
+            if let avg = Double(avgStr) {
+              DispatchQueue.main.async { result(Int(avg.rounded())) }
+              return
+            }
+          }
+          DispatchQueue.main.async {
+            result(FlutterError(code: "ping_error", message: "No se pudo parsear ping", details: nil))
+          }
         }
-        result(FlutterError(code: "ping_error", message: "No se pudo parsear ping", details: nil))
 
       case "checkTcpPort":
         guard let args = call.arguments as? [String: Any],
@@ -171,6 +209,21 @@ class RouteManagerPlugin {
       binaryMessenger: controller.engine.binaryMessenger
     )
     channel.setMethodCallHandler { call, result in
+      let privilegedMethods = [
+        "addRoute",
+        "removeRoute",
+        "enableSplitTunnel",
+        "disableSplitTunnel",
+        "verifyRoutes",
+      ]
+      if privilegedMethods.contains(call.method) {
+        result(FlutterError(
+          code: "no_soportado",
+          message: "macOS requiere un helper privilegiado (SMAppService) para modificar rutas. "
+            + "El split tunnel no está disponible en esta compilación.",
+          details: nil))
+        return
+      }
       switch call.method {
       case "addRoute":
         guard let args = call.arguments as? [String: Any],
@@ -179,6 +232,12 @@ class RouteManagerPlugin {
               let iface = args["interfaceName"] as? String else {
           result(FlutterError(code: "argumento_invalido",
                               message: "Faltan parámetros",
+                              details: nil))
+          return
+        }
+        guard isSafeCIDR(dest), isSafeIPv4(gw), isSafeInterface(iface) else {
+          result(FlutterError(code: "argumento_invalido",
+                              message: "Parámetros de ruta inválidos",
                               details: nil))
           return
         }
@@ -210,9 +269,29 @@ class RouteManagerPlugin {
                               details: nil))
           return
         }
-        let cmd = "/sbin/route -n delete \(dest) 2>&1"
+        guard isSafeCIDR(dest) else {
+          result(FlutterError(code: "argumento_invalido",
+                              message: "CIDR inválido",
+                              details: nil))
+          return
+        }
+        let gw = (args["gateway"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+        let iface = (args["interfaceName"] as? String)?.trimmingCharacters(in: .whitespaces) ?? ""
+        if !gw.isEmpty && !isSafeIPv4(gw) {
+          result(FlutterError(code: "argumento_invalido",
+                              message: "Gateway inválido",
+                              details: nil))
+          return
+        }
+        let target = gw.isEmpty ? dest : "\(dest) \(gw)"
+        let cmd = "/sbin/route -n delete \(target) 2>&1"
         let r = runShellSync(cmd)
         if r.exitCode != 0 {
+          let lower = r.output.lowercased()
+          if lower.contains("not in table") || lower.contains("no such process") {
+            result("La ruta \(dest) ya no existe.")
+            return
+          }
           result(FlutterError(code: "error_comando",
                               message: "Error al eliminar ruta: \(r.output)",
                               details: nil))
@@ -227,6 +306,13 @@ class RouteManagerPlugin {
               let iface = args["interfaceName"] as? String else {
           result(FlutterError(code: "argumento_invalido",
                               message: "Se requieren hospitalSubnets, gateway, interfaceName.",
+                              details: nil))
+          return
+        }
+        guard isSafeIPv4(gw), isSafeInterface(iface),
+              subnets.allSatisfy({ isSafeCIDR($0.trimmingCharacters(in: .whitespaces)) }) else {
+          result(FlutterError(code: "argumento_invalido",
+                              message: "Parámetros de túnel inválidos",
                               details: nil))
           return
         }
@@ -285,46 +371,52 @@ class RouteManagerPlugin {
         result(msgs.joined(separator: " "))
 
       case "getRoutes":
-        let r = runShellSync("/sbin/netstat -rn 2>&1")
-        result(r.output)
+        DispatchQueue.global(qos: .userInitiated).async {
+          let r = runShellSync("/sbin/netstat -rn 2>&1")
+          DispatchQueue.main.async { result(r.output) }
+        }
 
       case "getPrimaryDefaultRouteInfo":
-        var info: [String: String] = [
-          "interfaceName": "",
-          "gateway": "",
-          "routeMetric": ""
-        ]
-        let r = runShellSync("/usr/sbin/route -n get default 2>&1")
-        for rawLine in r.output.split(separator: "\n") {
-          let line = rawLine.trimmingCharacters(in: .whitespaces)
-          if line.hasPrefix("gateway:") {
-            info["gateway"] = String(line.dropFirst("gateway:".count))
-              .trimmingCharacters(in: .whitespaces)
-          } else if line.hasPrefix("interface:") {
-            info["interfaceName"] = String(line.dropFirst("interface:".count))
-              .trimmingCharacters(in: .whitespaces)
+        DispatchQueue.global(qos: .userInitiated).async {
+          var info: [String: String] = [
+            "interfaceName": "",
+            "gateway": "",
+            "routeMetric": ""
+          ]
+          let r = runShellSync("/usr/sbin/route -n get default 2>&1")
+          for rawLine in r.output.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("gateway:") {
+              info["gateway"] = String(line.dropFirst("gateway:".count))
+                .trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix("interface:") {
+              info["interfaceName"] = String(line.dropFirst("interface:".count))
+                .trimmingCharacters(in: .whitespaces)
+            }
           }
+          DispatchQueue.main.async { result(info) }
         }
-        result(info)
 
       case "listInterfaces":
-        // Preferred: `networksetup -listallhardwareports`
-        let r = runShellSync("/usr/sbin/networksetup -listallhardwareports 2>&1")
-        var out: [String] = []
-        for line in r.output.split(separator: "\n") {
-          let s = String(line).trimmingCharacters(in: .whitespaces)
-          if s.hasPrefix("Device: ") {
-            let iface = String(s.dropFirst("Device: ".count))
-              .trimmingCharacters(in: .whitespaces)
-            if !iface.isEmpty { out.append(iface) }
+        DispatchQueue.global(qos: .userInitiated).async {
+          // Preferred: `networksetup -listallhardwareports`
+          let r = runShellSync("/usr/sbin/networksetup -listallhardwareports 2>&1")
+          var out: [String] = []
+          for line in r.output.split(separator: "\n") {
+            let s = String(line).trimmingCharacters(in: .whitespaces)
+            if s.hasPrefix("Device: ") {
+              let iface = String(s.dropFirst("Device: ".count))
+                .trimmingCharacters(in: .whitespaces)
+              if !iface.isEmpty { out.append(iface) }
+            }
           }
+          if out.isEmpty {
+            // Fallback: ifconfig
+            let r2 = runShellSync("/sbin/ifconfig -l 2>&1")
+            out = r2.output.split(separator: " ").map(String.init)
+          }
+          DispatchQueue.main.async { result(out) }
         }
-        if out.isEmpty {
-          // Fallback: ifconfig
-          let r2 = runShellSync("/sbin/ifconfig -l 2>&1")
-          out = r2.output.split(separator: " ").map(String.init)
-        }
-        result(out)
 
       case "verifyRoutes":
         guard let args = call.arguments as? [String: Any],
@@ -357,37 +449,42 @@ class RdpLauncherPlugin {
     channel.setMethodCallHandler { call, result in
       switch call.method {
       case "preLaunch":
-        // Check either `open rdp://` handler or Microsoft Remote Desktop / CoRD
-        let r = runShellSync("/usr/bin/osascript -e 'id of application \"Microsoft Remote Desktop\"' 2>&1 || true")
-        let scheme = runShellSync("/usr/bin/open -Ra \"rdp:\" 2>&1; echo $?")
-        if r.exitCode == 0 || scheme.output.contains("0") {
-          result(true)
-        } else {
-          result(FlutterError(code: "sin_manejador_rdp",
-                              message: "Instala Microsoft Remote Desktop desde App Store.",
-                              details: nil))
+        DispatchQueue.global(qos: .userInitiated).async {
+          // Check either `open rdp://` handler or Microsoft Remote Desktop / CoRD
+          let r = runShellSync("/usr/bin/osascript -e 'id of application \"Microsoft Remote Desktop\"' 2>&1")
+          let scheme = runShellSync("/usr/bin/open -Ra \"rdp:\" 2>&1")
+          DispatchQueue.main.async {
+            if r.exitCode == 0 || scheme.exitCode == 0 {
+              result(true)
+            } else {
+              result(FlutterError(code: "sin_manejador_rdp",
+                                  message: "Instala Microsoft Remote Desktop desde App Store.",
+                                  details: nil))
+            }
+          }
         }
 
       case "isRdpClientAvailable":
-        // Apps known to handle RDP
-        let apps = [
-          "Microsoft Remote Desktop",
-          "Microsoft Remote Desktop Beta",
-          "CoRD",
-          "Royal TSX",
-          "Jump Desktop",
-        ]
-        for app in apps {
-          let r = runShellSync("/usr/bin/osascript -e 'id of application \"" + app + "\"' 2>&1 || true")
-          if r.exitCode == 0 { result(true); return }
+        DispatchQueue.global(qos: .userInitiated).async {
+          // Apps known to handle RDP
+          let apps = [
+            "Microsoft Remote Desktop",
+            "Microsoft Remote Desktop Beta",
+            "CoRD",
+            "Royal TSX",
+            "Jump Desktop",
+          ]
+          for app in apps {
+            let r = runShellSync("/usr/bin/osascript -e 'id of application \"" + app + "\"' 2>&1")
+            if r.exitCode == 0 {
+              DispatchQueue.main.async { result(true) }
+              return
+            }
+          }
+          // Scheme handler?
+          let scheme = runShellSync("/usr/bin/open -Ra \"rdp:\" > /dev/null 2>&1")
+          DispatchQueue.main.async { result(scheme.exitCode == 0) }
         }
-        // Scheme handler?
-        let scheme = runShellSync("/usr/bin/open -Ra \"rdp:\" > /dev/null 2>&1; echo $?")
-        if scheme.output.trimmingCharacters(in: .whitespacesAndNewlines) == "0" {
-          result(true)
-          return
-        }
-        result(false)
 
       case "launchRdp":
         guard let args = call.arguments as? [String: Any],
@@ -412,16 +509,10 @@ class RdpLauncherPlugin {
           uri = "ms-rd-web://" + utf8Encode(host)
         } else {
           var authority = ""
-          var hasAuth = false
-          if !domain.isEmpty {
-            authority += utf8Encode(domain) + "\\"
-            hasAuth = true
-          }
-          if !username.isEmpty {
-            authority += utf8Encode(username)
-            hasAuth = true
-          }
-          if hasAuth { authority += "@" }
+          var userInfo = ""
+          if !domain.isEmpty { userInfo += domain + "\\" }
+          if !username.isEmpty { userInfo += username }
+          if !userInfo.isEmpty { authority += utf8Encode(userInfo) + "@" }
           authority += "\(utf8Encode(host)):\(port)"
           uri = "rdp://" + authority
         }
@@ -435,14 +526,18 @@ class RdpLauncherPlugin {
           }
         }
         // Fallback: shell open
-        let r = runShellSync("/usr/bin/open \(uri.shellQuoted) 2>&1")
-        if r.exitCode == 0 {
-          result("Conexión RDP lanzada a \(host):\(port) correctamente.")
-          return
+        DispatchQueue.global(qos: .userInitiated).async {
+          let r = runShellSync("/usr/bin/open \(uri.shellQuoted) 2>&1")
+          DispatchQueue.main.async {
+            if r.exitCode == 0 {
+              result("Conexión RDP lanzada a \(host):\(port) correctamente.")
+            } else {
+              result(FlutterError(code: "lanzamiento_fallido",
+                                  message: "No se pudo lanzar cliente RDP: \(r.output)",
+                                  details: nil))
+            }
+          }
         }
-        result(FlutterError(code: "lanzamiento_fallido",
-                            message: "No se pudo lanzar cliente RDP: \(r.output)",
-                            details: nil))
 
       default:
         result(FlutterMethodNotImplemented)

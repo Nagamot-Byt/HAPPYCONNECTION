@@ -131,9 +131,12 @@ class SettingsStorage {
 
   // --- Sensitive (FlutterSecureStorage — encrypted) ---
 
+  // Keep getters/setters so tests can stub them with mocktail.
+  // ignore: unnecessary_getters_setters
   String get rdpUsername => _rdpUsername;
   set rdpUsername(String value) => _rdpUsername = value;
 
+  // ignore: unnecessary_getters_setters
   String get rdpDomain => _rdpDomain;
   set rdpDomain(String value) => _rdpDomain = value;
 }

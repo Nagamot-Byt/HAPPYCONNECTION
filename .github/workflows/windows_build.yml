@@ -1,0 +1,39 @@
+name: Windows Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+
+      - name: Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Windows Release
+        run: flutter build windows --release
+
+      - name: Compile Inno Setup Installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: windows/installer/inno_setup.iss
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: build/windows/installer/MedLinkConnect-Setup.exe

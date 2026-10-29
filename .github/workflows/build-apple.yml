@@ -8,10 +8,6 @@ on:
 jobs:
   macos:
     runs-on: macos-13
-    defaults:
-      run:
-        working-directory: medlink_connect
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -31,9 +27,8 @@ jobs:
         run: flutter config --enable-macos-desktop
 
       - name: Install macOS pods
-        run: |
-          cd macos
-          pod install || true
+        run: pod install || true
+        working-directory: macos
 
       - name: Build macOS release
         run: flutter build macos --release
@@ -58,15 +53,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: medlink_connect-macos
-          path: medlink_connect/build/macos/Build/Products/Release/medlink_connect.app
+          path: build/macos/Build/Products/Release/medlink_connect.app
           if-no-files-found: error
 
   ios-simulator:
     runs-on: macos-13
-    defaults:
-      run:
-        working-directory: medlink_connect
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -86,9 +77,8 @@ jobs:
         run: flutter config --enable-ios
 
       - name: Install iOS pods
-        run: |
-          cd ios
-          pod install || true
+        run: pod install || true
+        working-directory: ios
 
       - name: Build iOS for Simulator (no codesign)
         run: flutter build ios --simulator --debug --no-codesign

@@ -19,6 +19,9 @@ flutter_*.png
 .dbg/
 *.log
 
+# Clon/duplicado local del proyecto (no forma parte de este repo)
+/medlink_connect/
+
 # Distribución (no subir binarios pesados)
 dist/*/bundle/
 dist/**/*.deb

@@ -121,7 +121,7 @@ especificas por sistema operativo.
 ### Linux
 
 - adaptado en codigo
-- pendiente build y validacion final en host Linux
+- build release verificado en host Linux (`flutter build linux --release`)
 
 ## 9. Seguridad y datos
 
@@ -162,5 +162,5 @@ La recomendacion es:
 1. publicar primero `Windows`,
 2. usar esta version en piloto controlado,
 3. validar los cinco servidores en entorno real,
-4. y continuar el cierre de empaquetado nativo para Android, Apple y Linux
-   como siguiente fase de producto.
+4. y continuar el cierre de empaquetado nativo para Android y Apple como
+   siguiente fase de producto; Linux ya cuenta con build release verificado.

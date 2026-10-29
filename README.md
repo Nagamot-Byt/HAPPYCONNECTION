@@ -30,9 +30,11 @@ MedLink Connect **NO** implementa un túnel VPN completo (WireGuard/OpenVPN). Ut
 | Plataforma | Estado | Notas |
 |---|---|---|
 | **Windows** | Validado / Principal | Requiere **Ejecutar como Administrador** para modificar rutas estáticas |
-| **Linux** | Funcional | Paquete `.deb` disponible en Releases. Algunas funciones Wi-Fi/nativas limitadas |
-| **macOS** | Estructura disponible | Guía para compilar en Mac/GitHub Actions en `dist/macOS/` |
-| **Android/iOS** | Experimental | Implementación parcial |
+| **Linux** | Compilable / experimental | `flutter build linux --release` verificado. Wi-Fi nativo no implementado; rutas requieren `sudo`/polkit |
+| **macOS** | RDP sobre red existente | Split tunnel no disponible: requiere helper privilegiado. Guía de compilación en `dist/macOS/` |
+| **Android/iOS** | Experimental | Android requiere root para rutas; iOS requiere `NetworkExtension`. RDP se abre con un cliente externo |
+
+En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o WPA3 debe existir un perfil previo en el sistema operativo.
 
 ## Requisitos (Windows)
 
@@ -42,20 +44,16 @@ MedLink Connect **NO** implementa un túnel VPN completo (WireGuard/OpenVPN). Ut
 
 ## Instalación
 
-### Linux (.deb)
+### Linux
 ```bash
-sudo dpkg -i medlink-connect_1.0.0_amd64.deb
-sudo apt install -f
+flutter build linux --release
+./build/linux/x64/release/bundle/medlink_connect
 ```
 
-### Linux (.tar.gz)
-```bash
-tar -xzf MedLinkConnect_Linux.tar.gz
-cd Linux && ./instalar_medlink_connect.sh
-```
+Los artefactos de `dist/Linux/` son scripts de referencia; no se incluye un `.deb` generado en este repositorio.
 
 ### Windows
-Ver `dist/Windows/README_WINDOWS.txt`. Generar bundle desde Windows con `flutter build windows --release` o usar Inno Setup (`build_installer_inno.iss`).
+Ver `dist/Windows/README_WINDOWS.txt`. Generar bundle desde Windows con `flutter build windows --release` o usar Inno Setup (`windows/installer/inno_setup.iss`).
 
 Los instaladores/binarios oficiales se publican en **GitHub Releases**.
 

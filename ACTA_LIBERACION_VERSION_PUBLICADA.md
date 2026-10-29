@@ -38,10 +38,11 @@ conexion a infraestructura hospitalaria por escritorio remoto, con foco en:
 - binarios finales compilados para Android
 - binarios finales compilados para iPhone
 - binarios finales compilados para macOS
-- binarios finales compilados para Linux
 
-Estas plataformas quedaron adaptadas en codigo, pero no cerradas como release
-operativa equivalente en el mismo host de trabajo.
+Android, iPhone y macOS quedaron adaptados en codigo, pero no cerradas como
+release operativa equivalente en el mismo host de trabajo. Linux cuenta con
+build release verificado, aunque sin validacion operativa completa de rutas
+privilegiadas en este host.
 
 ## 4. Cambios principales de la version
 
@@ -112,7 +113,7 @@ Se ajustaron aspectos sensibles del lanzamiento RDP:
 
 - `lib/main.dart`
 - `lib/features/ui/home_screen.dart`
-- `lib/features/settings/settings_service.dart`
+- `lib/core/settings_storage.dart`
 
 Responsable de:
 
@@ -168,16 +169,18 @@ Responsable de:
 En el cierre de la version se ejecutaron validaciones repetidas:
 
 ```powershell
-dart analyze
+flutter analyze lib test
 flutter test
 flutter build windows --release
+flutter build linux --release
 ```
 
 Resultado:
 
-- `dart analyze` -> satisfactorio
-- `flutter test` -> satisfactorio
+- `flutter analyze lib test` -> satisfactorio (solo 2 infos preexistentes)
+- `flutter test` -> 43 pruebas satisfactorias
 - `flutter build windows --release` -> satisfactorio en el ciclo de cierre
+- `flutter build linux --release` -> satisfactorio en host Linux
 
 ## 7. Artefacto de salida
 
@@ -200,17 +203,20 @@ Ejecutable Windows release:
 ### iPhone
 
 - codigo adaptado
+- split tunnel pendiente de NetworkExtension/Personal VPN
+- RDP se delega a un cliente externo
 - build pendiente en host Apple
 
 ### macOS
 
-- codigo adaptado
+- RDP sobre la red existente mediante cliente externo
+- split tunnel no disponible: requiere helper privilegiado
 - build pendiente en host Apple
 
 ### Linux
 
 - codigo adaptado
-- build pendiente en host Linux
+- build release verificado en host Linux (`flutter build linux --release`)
 
 ## 9. Riesgos residuales
 
@@ -224,9 +230,13 @@ Persisten riesgos operativos normales del dominio:
 
 No se identifican en esta version:
 
-- contraseñas Wi-Fi persistidas,
+- contraseñas Wi-Fi persistidas por la aplicacion,
 - contraseñas RDP persistidas,
 - ni comparticion local de discos por defecto en la sesion remota.
+
+Windows puede conservar el perfil WLAN creado en el sistema operativo. La app
+solo genera perfiles WPA2-PSK; redes Enterprise o WPA3 requieren un perfil
+preexistente.
 
 ## 10. Criterio de aprobacion de liberacion
 

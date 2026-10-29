@@ -47,6 +47,6 @@
 ## Archivos clave
 
 - `lib/features/ui/home_screen.dart`
-- `lib/features/settings/settings_service.dart`
+- `lib/core/settings_storage.dart`
 - `windows/runner/wifi_manager_plugin.cc`
 - `README.md`

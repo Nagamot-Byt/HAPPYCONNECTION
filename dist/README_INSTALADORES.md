@@ -9,14 +9,15 @@
 **Para generar el bundle Windows:** En Windows ejecutar `flutter build windows --release` y copiar el contenido de `build\windows\x64\runner\Release\` a `dist\Windows\bundle\`. Después ejecutar el instalador o compilar con Inno Setup.
 
 ## Linux
-**Ejecutable listo:** `dist/Linux/MedLinkConnect_Linux.tar.gz`
-- Contiene `bundle/` (binario + libs + assets), `instalar_medlink_connect.sh`, `README_LINUX.txt`
-- Instalación: extraer, ejecutar `./instalar_medlink_connect.sh`
+**Referencia:** `dist/Linux/instalar_medlink_connect.sh` y `README_LINUX.txt`
+- Generar el bundle con `flutter build linux --release`
+- No se incluye un `.tar.gz` precompilado en este repositorio
 
 ## macOS
 **Carpeta:** `dist/macOS/` contiene instalador y README. Generar bundle desde macOS con `flutter build macos --release` si se requiere.
 
 ## Notas
-- Windows/Linux: flujo validado con túnel dividido, rutas, Wi-Fi y RDP
+- Windows: flujo de túnel dividido, rutas y RDP implementado; requiere validación en un host Windows real
+- Linux: build release verificado; Wi-Fi nativo pendiente y rutas requieren privilegios
 - Permisos de Administrador requeridos en Windows para modificar rutas
-- Tests: 26 tests pasando
+- Tests: suite automatizada de Flutter (`flutter test`)

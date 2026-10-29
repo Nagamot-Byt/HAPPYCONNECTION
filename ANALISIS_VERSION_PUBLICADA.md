@@ -122,7 +122,7 @@ Archivos clave:
 
 - `lib/main.dart`
 - `lib/features/ui/home_screen.dart`
-- `lib/features/settings/settings_service.dart`
+- `lib/core/settings_storage.dart`
 
 ### 6.2 Interfaces de dominio
 
@@ -219,12 +219,16 @@ Luego:
 
 Si una etapa posterior falla:
 
-- la app hace rollback de las rutas creadas en ese intento.
+- la app hace rollback de las rutas creadas en ese intento,
+- y conserva un registro de las rutas aplicadas para retirarlas al inicio de
+  la siguiente sesion si el cierre anterior no pudo completarse (crash o
+  cierre forzado).
 
 ## 7.4 Diagnostico al servidor
 
 Antes del lanzamiento:
 
+- se resuelve el nombre DNS del servidor (con aviso si no resuelve),
 - se hace `ping`,
 - se hace prueba TCP al puerto configurado,
 - se usan reintentos cortos,
@@ -253,10 +257,10 @@ La app permite:
 
 La seleccion automatica:
 
-- prueba los servidores configurados,
-- compara principalmente respuesta TCP,
-- usa `ping` como apoyo secundario,
-- y deja seleccionado el destino con mejor respuesta observable.
+- mide la respuesta TCP de cada servidor configurado,
+- compara las latencias obtenidas,
+- y deja seleccionado el destino con la menor latencia observable;
+  el `ping` se usa despues en el diagnostico de red del servidor elegido.
 
 ## 7.6 Lanzamiento RDP
 
@@ -403,7 +407,7 @@ Valoracion:
 - alto nivel de responsabilidad,
 - pero actualmente bien alineado con el objetivo del producto.
 
-## 10.2 `settings_service.dart`
+## 10.2 `settings_storage.dart`
 
 Responsabilidades:
 
@@ -497,9 +501,11 @@ Fortalezas:
 - base de rutas,
 - UI compartida.
 
-Limitacion:
+Limitaciones:
 
-- build final depende de entorno Android configurado.
+- build final depende de entorno Android configurado,
+- el tunel dividido requiere root; si no esta disponible, la app continua con
+  las rutas del sistema y avisa al usuario.
 
 ## 11.3 iPhone (iOS)
 
@@ -514,9 +520,11 @@ Fortalezas:
 - diagnostico compartido,
 - y flujo UI coherente.
 
-Limitacion:
+Limitaciones:
 
-- requiere Mac y toolchain Apple.
+- requiere Mac y toolchain Apple,
+- el tunel dividido requiere `NetworkExtension`/Personal VPN; sin esa
+  capacidad la app continua con las rutas del sistema y avisa al usuario.
 
 ## 11.4 macOS
 
@@ -529,15 +537,20 @@ Fortalezas:
 
 - diagnostico,
 - chequeo TCP,
-- rutas,
 - y apertura de clientes RDP del ecosistema Apple.
+
+Limitaciones:
+
+- el split tunnel no esta disponible bajo App Sandbox,
+- requiere un helper privilegiado para modificar la tabla de rutas,
+- la app continua usando las rutas del sistema y avisa al usuario.
 
 ## 11.5 Linux
 
 Estado:
 
 - adaptado en codigo
-- pendiente build en host Linux
+- build release verificado en host Linux
 
 Fortalezas:
 
@@ -605,11 +618,12 @@ Valoracion:
 Durante el cierre de la version se ejecutaron validaciones tecnicas repetidas:
 
 - `dart analyze`
-- `flutter test`
+- `flutter test` (43 pruebas)
 - `flutter build windows --release`
+- `flutter build linux --release`
 
 La version Windows release quedo generada correctamente durante el ciclo de
-cierre del proyecto.
+cierre del proyecto. El build Linux release tambien se verifico en host Linux.
 
 Ruta del ejecutable release Windows:
 

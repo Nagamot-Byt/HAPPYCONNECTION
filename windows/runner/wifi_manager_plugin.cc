@@ -41,28 +41,6 @@ using MethodChannelPtr =
 static std::wstring U8ToW(const std::string& s) { return Utf16FromUtf8(s); }
 static std::string WToU8(const std::wstring& w) { return Utf8FromUtf16(w.c_str()); }
 
-static EncodableValue ErrPair(const std::string& code,
-                              const std::string& msg) {
-  return flutter::CustomEncodableValue(std::make_pair(code, msg));
-}
-
-static bool DecodeErrPair(const flutter::CustomEncodableValue& err,
-                          std::string* code,
-                          std::string* msg) {
-  try {
-    const auto& pair =
-        std::any_cast<const std::pair<std::string, std::string>&>(
-            static_cast<const std::any&>(err));
-    *code = pair.first;
-    *msg = pair.second;
-    return true;
-  } catch (const std::bad_any_cast&) {
-    *code = "error_interno";
-    *msg = "No se pudo decodificar el error nativo.";
-    return false;
-  }
-}
-
 static std::wstring XmlEscape(const std::wstring& s) {
   std::wstring out;
   out.reserve(s.size());

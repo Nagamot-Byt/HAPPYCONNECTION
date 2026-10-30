@@ -32,7 +32,8 @@ MedLink Connect **NO** implementa un túnel VPN completo (WireGuard/OpenVPN). Ut
 | **Windows** | Validado / Principal | Requiere **Ejecutar como Administrador** para modificar rutas estáticas |
 | **Linux** | Compilable / experimental | `flutter build linux --release` verificado. Wi-Fi nativo no implementado; rutas requieren `sudo`/polkit |
 | **macOS** | RDP sobre red existente | Split tunnel no disponible: requiere helper privilegiado. Guía de compilación en `dist/macOS/` |
-| **Android/iOS** | Experimental | Android requiere root para rutas; iOS requiere `NetworkExtension`. RDP se abre con un cliente externo |
+| **Android** | Compilable / experimental | APK y AAB release verificados (2026-10-30). El Wi-Fi se toma de la red actual; las rutas requieren root. RDP se abre con un cliente externo |
+| **iOS** | Experimental | Requiere `NetworkExtension` para rutas; RDP se abre con un cliente externo |
 
 En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o WPA3 debe existir un perfil previo en el sistema operativo.
 

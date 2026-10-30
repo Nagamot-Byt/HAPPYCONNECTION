@@ -39,6 +39,9 @@ Primera versión publicable con empaquetado de escritorio para Windows y Linux.
 - Validación estricta de interfaces en Android y eliminación del force-unwrap
   del motor Flutter en iOS.
 - Build de Windows en cada push/PR al ejecutar el pipeline de escritorio.
+- Build Android reparado: el módulo `app` ahora aplica los plugins de Android,
+  Kotlin y Flutter Gradle, y el NDK queda alineado con las dependencias
+  (`27.0.12077973`).
 
 ### Verificación
 
@@ -46,3 +49,5 @@ Primera versión publicable con empaquetado de escritorio para Windows y Linux.
 - `flutter test`: 60 pruebas correctas.
 - Build Linux release validado localmente.
 - Build Windows e instalador generados por CI.
+- Build Android validado localmente: APK debug, APK release y AAB release, con
+  artefactos en `dist/Android/` (firma de depuración).

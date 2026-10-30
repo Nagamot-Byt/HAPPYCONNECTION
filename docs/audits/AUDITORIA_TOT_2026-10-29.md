@@ -282,3 +282,29 @@ flutter test              → 48 tests passed
 flutter analyze lib test  → No issues found
 flutter test              → 60 tests passed
 ```
+
+## 10. Actualización 2026-10-30 (verificación Android)
+
+- **Build Android reparado:** `android/app/build.gradle.kts` no aplicaba los
+  plugins `com.android.application`, `kotlin-android` ni
+  `dev.flutter.flutter-gradle-plugin`, por lo que Flutter abortaba con
+  «unsupported Gradle project». Se añadió el bloque `plugins`.
+- **NDK alineado:** se fijó `ndkVersion = "27.0.12077973"`, la versión que
+  requieren `flutter_secure_storage`, `path_provider_android` y
+  `shared_preferences_android`.
+- Entorno de validación: Flutter 3.27.4, Temurin JDK 17, Android SDK 35,
+  build-tools 35.0.0 y NDK 27.0.12077973.
+- Sin dispositivo físico ni `/dev/kvm`, por lo que no se ejecutó la app en un
+  terminal Android. Queda pendiente la prueba runtime de Wi-Fi, root/rutas y
+  lanzamiento del cliente RDP externo.
+
+```text
+flutter build apk --debug        → OK
+flutter build apk --release      → OK (22.2 MB)
+flutter build appbundle --release → OK (23.1 MB)
+flutter analyze lib test         → No issues found
+flutter test                     → 60 tests passed
+```
+
+Artefactos: `dist/Android/MedLinkConnect_0.1.0.apk` y
+`dist/Android/MedLinkConnect_0.1.0.aab`, firmados con la clave de depuración.

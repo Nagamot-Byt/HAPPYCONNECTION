@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:medlink_connect/features/ui/home_controller.dart';
 import 'package:medlink_connect/features/ui/widgets/glass_container.dart';
@@ -10,6 +11,7 @@ class ServerSelectionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<HomeController>();
     final presets = controller.serverPresets;
+    final l10n = AppLocalizations.of(context)!;
 
     return GlassContainer(
       child: Padding(
@@ -18,7 +20,7 @@ class ServerSelectionPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '2. Escritorio remoto',
+              l10n.rdpSectionTitle,
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
@@ -28,15 +30,15 @@ class ServerSelectionPanel extends StatelessWidget {
             DropdownButtonFormField<String>(
               value: controller.selectedServerPresetId,
               isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Servidor preconfigurado',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l10n.serverPresetLabel,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
               items: [
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: 'manual',
-                  child: Text('Manual'),
+                  child: Text(l10n.manual),
                 ),
                 for (final preset in presets)
                   DropdownMenuItem(
@@ -44,7 +46,7 @@ class ServerSelectionPanel extends StatelessWidget {
                     child: Text(
                       preset.isConfigured
                           ? '${preset.label} - ${preset.host}:${preset.port}'
-                          : '${preset.label} - pendiente por configurar',
+                          : l10n.presetPending(preset.label),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -63,10 +65,10 @@ class ServerSelectionPanel extends StatelessWidget {
                         controller.preferMostStableServer = false;
                         controller.selectedServerPresetId = value;
                         controller.setGuidance(
-                          'Servidor pendiente de configuración',
+                          l10n.presetPendingTitle,
                           bullets: [
-                            'Ese cupo ya quedó reservado.',
-                            'En cuanto me compartas los 5 servidores, lo dejo operativo.',
+                            l10n.presetPendingBullet1,
+                            l10n.presetPendingBullet2,
                           ],
                           isError: true,
                         );
@@ -82,12 +84,11 @@ class ServerSelectionPanel extends StatelessWidget {
             SwitchListTile(
               value: controller.preferMostStableServer,
               contentPadding: EdgeInsets.zero,
-              title:
-                  const Text('Elegir automáticamente el servidor más estable'),
+              title: Text(l10n.autoSelectServer),
               subtitle: Text(
                 presets.isEmpty
-                    ? 'La estructura para servidores ya está lista; falta cargar los datos reales.'
-                    : 'La app medirá respuesta TCP y usará el mejor servidor disponible.',
+                    ? l10n.presetsEmptySubtitle
+                    : l10n.presetsReadySubtitle,
               ),
               onChanged: controller.busy
                   ? null
@@ -102,7 +103,7 @@ class ServerSelectionPanel extends StatelessWidget {
                     ? null
                     : () => controller.diagnoseBestServerPreset(),
                 icon: const Icon(Icons.hub_outlined),
-                label: const Text('Diagnosticar mejor servidor'),
+                label: Text(l10n.diagnoseBestServer),
               ),
             ),
             const SizedBox(height: 12),
@@ -115,10 +116,10 @@ class ServerSelectionPanel extends StatelessWidget {
                     child: TextField(
                       controller: controller.rdpHostCtrl,
                       enabled: !controller.busy,
-                      decoration: const InputDecoration(
-                        labelText: 'Host / IP RDP',
-                        hintText: 'serv_pediatrico.huv.gov.co',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.rdpHostLabel,
+                        hintText: l10n.rdpHostHint,
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                     ),
@@ -132,9 +133,9 @@ class ServerSelectionPanel extends StatelessWidget {
                       controller: controller.rdpPortCtrl,
                       enabled: !controller.busy,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Puerto',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.rdpPortLabel,
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                     ),
@@ -150,9 +151,9 @@ class ServerSelectionPanel extends StatelessWidget {
                     child: TextField(
                       controller: controller.rdpUserCtrl,
                       enabled: !controller.busy,
-                      decoration: const InputDecoration(
-                        labelText: 'Usuario (opcional)',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.rdpUserOptional,
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                     ),
@@ -165,9 +166,9 @@ class ServerSelectionPanel extends StatelessWidget {
                     child: TextField(
                       controller: controller.rdpDomainCtrl,
                       enabled: !controller.busy,
-                      decoration: const InputDecoration(
-                        labelText: 'Dominio (opcional)',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.rdpDomainOptional,
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                     ),
@@ -177,23 +178,23 @@ class ServerSelectionPanel extends StatelessWidget {
             ),
             DropdownButtonFormField<String>(
               value: controller.rdpProfile,
-              decoration: const InputDecoration(
-                labelText: 'Perfil RDP',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l10n.rdpProfile,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
-              items: const [
+              items: [
                 DropdownMenuItem(
                   value: 'adaptive',
-                  child: Text('Adaptativo'),
+                  child: Text(l10n.profileAdaptive),
                 ),
                 DropdownMenuItem(
                   value: 'stable',
-                  child: Text('Máxima estabilidad'),
+                  child: Text(l10n.profileStable),
                 ),
                 DropdownMenuItem(
                   value: 'speed',
-                  child: Text('Máxima velocidad'),
+                  child: Text(l10n.profileSpeed),
                 ),
               ],
               onChanged: controller.busy
@@ -204,9 +205,7 @@ class ServerSelectionPanel extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Adaptativo elige el perfil según la latencia al servidor. '
-              'Máxima estabilidad reduce funciones visuales y reintenta más. '
-              'Máxima velocidad recorta redirecciones para abrir antes.',
+              l10n.rdpProfileExplanation,
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],

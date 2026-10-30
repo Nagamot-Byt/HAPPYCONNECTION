@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:medlink_connect/features/ui/home_controller.dart';
 
 class ConnectionStepIndicator extends StatelessWidget {
@@ -14,11 +15,12 @@ class ConnectionStepIndicator extends StatelessWidget {
       ConnectionStep.preLaunch,
       ConnectionStep.launchRdp,
     ];
-    const labels = [
-      'Preparar',
-      'Túnel',
-      'Verificar',
-      'Abrir RDP',
+    final l10n = AppLocalizations.of(context)!;
+    final labels = [
+      l10n.stepPrepare,
+      l10n.stepTunnel,
+      l10n.stepVerify,
+      l10n.stepOpenRdp,
     ];
 
     final currentIdx = steps.indexOf(controller.step);

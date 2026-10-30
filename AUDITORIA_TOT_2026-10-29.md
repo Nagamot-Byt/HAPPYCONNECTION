@@ -188,7 +188,7 @@ Pregunta raíz: **¿Es seguro y confiable desplegar MedLink Connect en el hospit
 | FUN-07 | Media | Clasificación de errores por texto/emoji | `home_controller.dart` | Abierto |
 | ARQ-01 | Media | `HomeController` monolítico (~1158 líneas) | `home_controller.dart` | Abierto |
 | ARQ-02 | Media | `mobile_rdp` desconectado y con proxy en memoria | `lib/mobile_rdp/` | Abierto; decidir eliminar o completar |
-| UI-01 | Alta | i18n incompleta pese a ARB es/en | `home_screen.dart`, widgets, controlador | Abierto |
+| UI-01 | Alta | i18n incompleta pese a ARB es/en | `home_screen.dart`, widgets, controlador | **Corregido** (2026-10-30) |
 | UI-02 | Media | Tema claro/oscuro no reflejado en fondo | `home_screen.dart`, `app_theme.dart` | Abierto |
 | UI-03 | Media | Sin semántica/accesibilidad sistemática | widgets UI | Abierto |
 | UI-04 | Baja | Logs usan emoji para nivel de error | `home_controller.dart`, `connection_logs_widget.dart` | Abierto |
@@ -242,3 +242,14 @@ CI Apple                  → run 40996941485 queued al último chequeo
 MedLink Connect tiene un núcleo Windows coherente, con controles de seguridad razonables y un flujo de conexión bien pensado. La deuda principal no está en el camino feliz de Windows, sino en la **integridad de producto**: i18n incompleta, UI no accesible de forma sistemática, cobertura insuficiente en UI/nativo y soporte macOS/iOS incompleto.
 
 Con las correcciones P0 aplicadas, el proyecto queda en mejor posición para una validación Windows controlada. Un release multiplataforma requeriría cerrar P1 y resolver explícitamente el alcance de macOS/iOS/mobile_rdp.
+
+## 8. Actualización 2026-10-30
+
+- **UI-01 cerrado:** toda la UI visible, las guías, los registros del controlador, las etiquetas de perfiles RDP y los presets de servidor usan `AppLocalizations` (es/en).
+- `HomeController` recibe `AppLocalizations` por inyección; la suite usa `AppLocalizationsEs` y se añadió una prueba de widget que valida el cambio a inglés.
+- Verificación ejecutada tras el cambio:
+
+```text
+flutter analyze lib test  → No issues found
+flutter test              → 48 tests passed
+```

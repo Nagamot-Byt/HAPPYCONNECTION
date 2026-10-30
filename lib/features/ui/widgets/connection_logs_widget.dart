@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:medlink_connect/features/ui/home_controller.dart';
 import 'package:medlink_connect/features/ui/widgets/glass_container.dart';
@@ -10,6 +11,7 @@ class ConnectionLogsWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<HomeController>();
     final logs = controller.logs;
+    final l10n = AppLocalizations.of(context)!;
 
     return GlassContainer(
       child: Padding(
@@ -20,7 +22,7 @@ class ConnectionLogsWidget extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  'Registro de actividad',
+                  l10n.activityLogs,
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
@@ -28,7 +30,7 @@ class ConnectionLogsWidget extends StatelessWidget {
                 ),
                 const Spacer(),
                 IconButton.outlined(
-                  tooltip: 'Limpiar registro',
+                  tooltip: l10n.clearLogs,
                   onPressed: logs.isEmpty ? null : controller.clearLogs,
                   icon: const Icon(Icons.delete_sweep_outlined),
                 ),
@@ -45,7 +47,7 @@ class ConnectionLogsWidget extends StatelessWidget {
               child: logs.isEmpty
                   ? Center(
                       child: Text(
-                        'No hay actividad reciente.',
+                        l10n.noRecentActivity,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     )

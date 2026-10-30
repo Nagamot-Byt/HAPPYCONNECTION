@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:medlink_connect/features/ui/home_controller.dart';
 import 'package:medlink_connect/features/ui/widgets/glass_container.dart';
@@ -16,6 +17,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<HomeController>();
+    final l10n = AppLocalizations.of(context)!;
 
     return Column(
       children: [
@@ -26,7 +28,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '1. Conexión Wi-Fi',
+                  l10n.wifiSectionTitle,
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
@@ -35,8 +37,8 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                 const SizedBox(height: 8),
                 Text(
                   controller.wifiManager == null
-                      ? 'En esta plataforma la conexión Wi-Fi debe hacerse desde los ajustes del sistema. La app seguirá ayudando con diagnóstico y apertura del cliente RDP.'
-                      : 'Selecciona la red, escribe la contraseña y la app intentará completar automáticamente la configuración de red necesaria.',
+                      ? l10n.wifiNoNativeHelper
+                      : l10n.wifiSelectHint,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 12),
@@ -48,17 +50,17 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                       controller: controller.wifiPasswordCtrl,
                       enabled: !controller.busy,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Contraseña Wi-Fi',
-                        hintText: 'No se guarda automáticamente',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: l10n.wifiPassword,
+                        hintText: l10n.wifiPasswordHint,
+                        border: const OutlineInputBorder(),
                         isDense: true,
                       ),
                     ),
                   ),
                 ] else
                   Text(
-                    'Consejo: conéctate primero a la red necesaria desde los ajustes del sistema y luego vuelve aquí para revisar estabilidad y abrir RDP.',
+                    l10n.wifiNoHelperTip,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 Wrap(
@@ -72,7 +74,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                           ? null
                           : () => controller.refreshWifiNetworks(),
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Actualizar redes'),
+                      label: Text(l10n.refreshNetworks),
                     ),
                     FilledButton.tonalIcon(
                       onPressed: controller.busy ||
@@ -81,7 +83,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                           ? null
                           : () => controller.connectWifiOnly(),
                       icon: const Icon(Icons.wifi),
-                      label: const Text('Conectar Wi-Fi'),
+                      label: Text(l10n.connectWifi),
                     ),
                   ],
                 ),
@@ -95,15 +97,14 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
             initiallyExpanded: _showAdvanced,
             onExpansionChanged: (value) =>
                 setState(() => _showAdvanced = value),
-            title: const Text('Opciones avanzadas'),
-            subtitle: const Text(
-                'Solo si quieres revisar o ajustar la configuración técnica'),
+            title: Text(l10n.advancedOptions),
+            subtitle: Text(l10n.advancedOptionsSubtitle),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: [
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Estos valores se pueden completar automáticamente después de conectarte al Wi-Fi.',
+                  l10n.advancedValuesHint,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -117,7 +118,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                       ? null
                       : () => controller.syncCurrentWifiInfo(silent: false),
                   icon: const Icon(Icons.my_location_outlined),
-                  label: const Text('Detectar red actual'),
+                  label: Text(l10n.detectCurrentNetwork),
                 ),
               ),
               const SizedBox(height: 12),
@@ -129,10 +130,10 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                       child: TextField(
                         controller: controller.gatewayCtrl,
                         enabled: !controller.busy,
-                        decoration: const InputDecoration(
-                          labelText: 'Gateway',
-                          hintText: 'ej: 192.168.1.1',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: l10n.gateway,
+                          hintText: l10n.gatewayHint,
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                       ),
@@ -145,10 +146,10 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                       child: TextField(
                         controller: controller.ifaceCtrl,
                         enabled: !controller.busy,
-                        decoration: const InputDecoration(
-                          labelText: 'Interfaz',
-                          hintText: 'ej: Wi-Fi, Ethernet',
-                          border: OutlineInputBorder(),
+                        decoration: InputDecoration(
+                          labelText: l10n.networkInterface,
+                          hintText: l10n.interfaceHint,
+                          border: const OutlineInputBorder(),
                           isDense: true,
                         ),
                       ),
@@ -162,10 +163,10 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                   controller: controller.subnetsCtrl,
                   enabled: !controller.busy,
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Subredes del hospital (una por línea)',
-                    hintText: '10.0.0.0/8',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: l10n.hospitalSubnetsOnePerLine,
+                    hintText: l10n.hospitalSubnetsHint,
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                 ),
@@ -178,6 +179,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
   }
 
   Widget _buildWifiSelector(BuildContext context, HomeController controller) {
+    final l10n = AppLocalizations.of(context)!;
     final options = <String>[
       ...controller.wifiNetworks.where((e) => e.isNotEmpty),
     ];
@@ -196,7 +198,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
         ),
       DropdownMenuItem<String>(
         value: controller.manualWifiOption,
-        child: const Text('Otra red…'),
+        child: Text(l10n.otherNetwork),
       ),
     ];
 
@@ -217,7 +219,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
           value: value,
           isExpanded: true,
           decoration: InputDecoration(
-            labelText: 'Red Wi-Fi',
+            labelText: l10n.wifiNetworkLabel,
             border: const OutlineInputBorder(),
             isDense: true,
             suffixIcon: controller.wifiNetworksLoading
@@ -249,10 +251,10 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
             child: TextField(
               controller: controller.manualWifiCtrl,
               enabled: !controller.busy,
-              decoration: const InputDecoration(
-                labelText: 'Nombre de la red Wi-Fi',
-                hintText: 'Ej: Hospital-Staff',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: l10n.wifiNetworkName,
+                hintText: l10n.wifiNetworkNameHint,
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),

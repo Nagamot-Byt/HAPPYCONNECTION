@@ -32,6 +32,7 @@ class HomeScreen extends StatelessWidget {
         networkDiagnostics: getIt<NetworkDiagnostics>(),
         rdpLauncher: getIt<RdpLauncher>(),
         workflowService: getIt<ConnectionWorkflowService>(),
+        l10n: AppLocalizations.of(context)!,
       )..init(),
       child: const _HomeScreenContent(),
     );
@@ -44,6 +45,7 @@ class _HomeScreenContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<HomeController>();
+    final l10n = AppLocalizations.of(context)!;
 
     final stepColor = switch (controller.step) {
       ConnectionStep.done => Colors.green,
@@ -53,14 +55,14 @@ class _HomeScreenContent extends StatelessWidget {
 
     final stepText = switch (controller.step) {
       ConnectionStep.idle => controller.splitTunnelActive
-          ? 'Túnel dividido activo'
-          : (controller.loaded ? 'Listo para conectar' : 'Cargando…'),
-      ConnectionStep.diagnostics => 'Preparando conexión…',
-      ConnectionStep.splitTunnel => 'Configurando rutas…',
-      ConnectionStep.preLaunch => 'Verificando destino y cliente RDP…',
-      ConnectionStep.launchRdp => 'Lanzando RDP…',
-      ConnectionStep.done => 'Conectado',
-      ConnectionStep.error => 'Error',
+          ? l10n.statusTunnelActive
+          : (controller.loaded ? l10n.statusReady : l10n.statusLoading),
+      ConnectionStep.diagnostics => l10n.stepPreparing,
+      ConnectionStep.splitTunnel => l10n.stepConfiguringRoutes,
+      ConnectionStep.preLaunch => l10n.stepVerifyingTarget,
+      ConnectionStep.launchRdp => l10n.stepLaunchingRdp,
+      ConnectionStep.done => l10n.stepConnected,
+      ConnectionStep.error => l10n.stepError,
     };
 
     return Container(
@@ -79,30 +81,28 @@ class _HomeScreenContent extends StatelessWidget {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: Text(AppLocalizations.of(context)!.appTitle),
+          title: Text(l10n.appTitle),
           actions: [
             IconButton(
-              tooltip: 'Restablecer ajustes',
+              tooltip: l10n.resetSettingsTitle,
               onPressed: controller.busy || controller.settings == null
                   ? null
                   : () async {
                       final confirmed = await showDialog<bool>(
                         context: context,
                         builder: (dialogContext) => AlertDialog(
-                          title: const Text('Restablecer ajustes'),
-                          content: const Text(
-                              'Se borrarán las subredes, credenciales RDP y '
-                              'preferencias guardadas. ¿Continuar?'),
+                          title: Text(l10n.resetSettingsTitle),
+                          content: Text(l10n.resetSettingsConfirm),
                           actions: [
                             TextButton(
                               onPressed: () =>
                                   Navigator.of(dialogContext).pop(false),
-                              child: const Text('Cancelar'),
+                              child: Text(l10n.cancel),
                             ),
                             FilledButton(
                               onPressed: () =>
                                   Navigator.of(dialogContext).pop(true),
-                              child: const Text('Restablecer'),
+                              child: Text(l10n.resetAction),
                             ),
                           ],
                         ),
@@ -189,7 +189,8 @@ class _HomeScreenContent extends StatelessWidget {
                                   ),
                                   if (controller.currentWifiSsid.isNotEmpty)
                                     Text(
-                                      'Wi-Fi actual: ${controller.currentWifiSsid}',
+                                      l10n.currentWifi(
+                                          controller.currentWifiSsid),
                                       style:
                                           Theme.of(context).textTheme.bodySmall,
                                     ),

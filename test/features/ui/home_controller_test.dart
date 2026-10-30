@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations_es.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:medlink_connect/features/ui/home_controller.dart';
 import 'package:medlink_connect/core/network_diagnostics.dart';
@@ -59,6 +60,7 @@ void main() {
       networkDiagnostics: mockNetworkDiagnostics,
       rdpLauncher: mockRdpLauncher,
       workflowService: mockWorkflowService,
+      l10n: AppLocalizationsEs(),
     );
   });
 

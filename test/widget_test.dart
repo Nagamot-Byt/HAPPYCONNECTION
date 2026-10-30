@@ -20,4 +20,16 @@ void main() {
     // Ensure the app renders without crashing.
     expect(find.byType(MaterialApp), findsOneWidget);
   });
+
+  testWidgets('App switches the interface to English',
+      (WidgetTester tester) async {
+    tester.binding.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.binding.platformDispatcher.clearLocaleTestValue);
+
+    await tester.pumpWidget(const MedLinkConnectApp());
+
+    expect(find.text('Refresh Networks'), findsOneWidget);
+    expect(find.text('Connect Wi-Fi'), findsOneWidget);
+    expect(find.text('Advanced Options'), findsOneWidget);
+  });
 }

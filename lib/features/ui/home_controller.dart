@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:medlink_connect/core/connection_workflow_service.dart';
 import 'package:medlink_connect/core/network_diagnostics.dart';
 import 'package:medlink_connect/core/rdp_launcher.dart';
@@ -40,6 +41,7 @@ class HomeController extends ChangeNotifier {
   final NetworkDiagnostics networkDiagnostics;
   final RdpLauncher rdpLauncher;
   final ConnectionWorkflowService workflowService;
+  final AppLocalizations l10n;
 
   HomeController({
     this.settings,
@@ -48,6 +50,7 @@ class HomeController extends ChangeNotifier {
     required this.networkDiagnostics,
     required this.rdpLauncher,
     required this.workflowService,
+    required this.l10n,
   });
 
   bool _loaded = false;
@@ -165,11 +168,11 @@ class HomeController extends ChangeNotifier {
 
   void setReadyGuidance() {
     setGuidance(
-      'Listo para conectar',
+      l10n.guidanceReadyTitle,
       bullets: [
-        '1. Selecciona la red Wi-Fi o detecta la actual.',
-        '2. Opcional: Elige un servidor o deja la selección automática.',
-        '3. Pulsa "Conectar y abrir RDP".',
+        l10n.guidanceReadyBullet1,
+        l10n.guidanceReadyBullet2,
+        l10n.guidanceReadyBullet3,
       ],
     );
   }
@@ -180,11 +183,11 @@ class HomeController extends ChangeNotifier {
         eStr.contains('administrador') ||
         eStr.contains('elevado')) {
       setGuidance(
-        'Faltan permisos de Administrador',
+        l10n.guidanceAdminErrorTitle,
         bullets: [
-          'Windows requiere permisos elevados para modificar las rutas de red (túnel dividido).',
-          'Cierra la aplicación y vuelve a abrirla haciendo clic derecho > "Ejecutar como administrador".',
-          'Si ya está como administrador, verifica el UAC.',
+          l10n.guidanceAdminErrorBullet1,
+          l10n.guidanceAdminErrorBullet2,
+          l10n.guidanceAdminErrorBullet3,
         ],
         isError: true,
       );
@@ -192,11 +195,11 @@ class HomeController extends ChangeNotifier {
         eStr.contains('wifi') ||
         eStr.contains('wlan')) {
       setGuidance(
-        'Problema con la red Wi-Fi',
+        l10n.guidanceWifiErrorTitle,
         bullets: [
-          'Verifica que el nombre de la red y la contraseña sean correctos.',
-          'Para redes abiertas deja la contraseña vacía.',
-          'Conéctate manualmente desde Windows y luego usa "Detectar red actual".',
+          l10n.guidanceWifiErrorBullet1,
+          l10n.guidanceWifiErrorBullet3,
+          l10n.guidanceWifiErrorBullet2,
         ],
         isError: true,
       );
@@ -205,12 +208,12 @@ class HomeController extends ChangeNotifier {
         eStr.contains('gateway') ||
         eStr.contains('interfaz')) {
       setGuidance(
-        'Problema con rutas/gateway',
+        l10n.guidanceRouteErrorTitle,
         bullets: [
-          'Usa "Detectar red actual" para actualizar gateway e interfaz.',
-          'Asegúrate de estar conectado a la red del hospital.',
-          'Verifica que las subredes hospitalarias sean correctas.',
-          'Requiere permisos de Administrador para agregar rutas.',
+          l10n.guidanceRouteErrorBullet1,
+          l10n.guidanceRouteErrorBullet2,
+          l10n.guidanceRouteErrorBullet3,
+          l10n.guidanceRouteErrorBullet4,
         ],
         isError: true,
       );
@@ -218,21 +221,21 @@ class HomeController extends ChangeNotifier {
         eStr.contains('mstsc') ||
         eStr.contains('3389')) {
       setGuidance(
-        'Problema con RDP/puerto 3389',
+        l10n.guidanceRdpErrorTitle,
         bullets: [
-          'Verifica que el servidor RDP sea accesible por el puerto configurado.',
-          'Usa "Ayudarme a corregir" para diagnosticar rutas y conectividad.',
-          'Asegúrate de tener el cliente RDP de Windows disponible.',
+          l10n.guidanceRdpErrorBullet1,
+          l10n.guidanceRdpErrorBullet2,
+          l10n.guidanceRdpErrorBullet3,
         ],
         isError: true,
       );
     } else {
       setGuidance(
-        'La conexión no se completó',
+        l10n.guidanceGenericErrorTitle,
         bullets: [
-          'Revisa el registro de actividad para ver el motivo exacto.',
-          'Usa "Ayudarme a corregir" para intentar reparar el problema automáticamente.',
-          'Si persiste, verifica permisos de Administrador y conexión Wi-Fi.',
+          l10n.guidanceGenericErrorBullet1,
+          l10n.guidanceGenericErrorBullet2,
+          l10n.guidanceGenericErrorBullet3,
         ],
         isError: true,
       );
@@ -241,17 +244,16 @@ class HomeController extends ChangeNotifier {
 
   Future<void> init() async {
     _logs.clear();
-    log('Iniciando MedLink Connect...');
+    log(l10n.logStartup);
     try {
       await _loadSettings();
     } catch (e) {
-      log('No se pudieron cargar los ajustes guardados: $e', isError: true);
+      log(l10n.logLoadSettingsError('$e'), isError: true);
     }
     try {
       await _cleanupStaleSplitTunnel();
     } catch (e) {
-      log('No se pudieron limpiar rutas de una sesión anterior: $e',
-          isError: true);
+      log(l10n.logCleanupSettingsError('$e'), isError: true);
     }
     _loaded = true;
     notifyListeners();
@@ -282,7 +284,7 @@ class HomeController extends ChangeNotifier {
     final pending = s.pendingSplitTunnelCleanup;
     if (pending == null) return;
 
-    log('Detectado un túnel anterior sin cierre limpio; retirando rutas…');
+    log(l10n.logStaleTunnelFound);
     final failures = <String>[];
     for (final subnet in pending.subnets) {
       try {
@@ -298,10 +300,10 @@ class HomeController extends ChangeNotifier {
     if (failures.isEmpty) {
       await s.clearPendingSplitTunnelCleanup();
       _splitTunnelActive = false;
-      log('Rutas de la sesión anterior eliminadas.');
+      log(l10n.logStaleRoutesRemoved);
     } else {
       log(
-        'No se pudieron retirar todas las rutas previas: ${failures.join(', ')}',
+        l10n.logStaleRoutesFailed(failures.join(', ')),
         isError: true,
       );
     }
@@ -310,7 +312,7 @@ class HomeController extends ChangeNotifier {
   Future<void> _loadSettings() async {
     final s = settings;
     if (s == null) {
-      log('Almacenamiento no disponible; se usarán valores en memoria.');
+      log(l10n.logStorageUnavailable);
       return;
     }
     await s.init();
@@ -328,30 +330,30 @@ class HomeController extends ChangeNotifier {
     manualWifiCtrl.text = s.wifiSsid;
     _selectedServerPresetId = s.selectedServerPresetId;
 
-    serverPresets = const [
+    serverPresets = [
       ServerPreset(
           id: 'pediatrico',
-          label: 'Pediatría',
+          label: l10n.presetPediatric,
           host: 'serv_pediatrico.huv.gov.co',
           port: 3389),
       ServerPreset(
           id: 'ginecologico',
-          label: 'Ginecología',
+          label: l10n.presetGynecology,
           host: 'serv_ginecologico.huv.gov.co',
           port: 3389),
       ServerPreset(
           id: 'moviles',
-          label: 'Móviles',
+          label: l10n.presetMobile,
           host: 'serv_moviles.huv.gov.co',
           port: 3389),
       ServerPreset(
           id: 'consulta_externa',
-          label: 'Consulta Externa',
+          label: l10n.presetOutpatient,
           host: 'serv_const_ext.huv.gov.co',
           port: 3389),
       ServerPreset(
           id: 'urgencias',
-          label: 'Urgencias',
+          label: l10n.presetEmergency,
           host: 'serv_urgencias.huv.gov.co',
           port: 3389),
     ];
@@ -387,7 +389,7 @@ class HomeController extends ChangeNotifier {
     try {
       await saveSettings();
     } catch (e) {
-      log('No se pudieron guardar los ajustes: $e', isError: true);
+      log(l10n.logSaveSettingsError('$e'), isError: true);
     }
   }
 
@@ -403,14 +405,14 @@ class HomeController extends ChangeNotifier {
     if (!silent) {
       _wifiNetworksLoading = true;
       notifyListeners();
-      log('Buscando redes Wi-Fi...');
+      log(l10n.logSearchingWifi);
     }
     try {
       final networks = await wifiManager!.scanNetworks();
       _wifiNetworks = networks;
-      if (!silent) log('Se encontraron ${networks.length} redes Wi-Fi.');
+      if (!silent) log(l10n.logNetworksFound(networks.length));
     } catch (e) {
-      if (!silent) log('Error al buscar redes Wi-Fi: $e', isError: true);
+      if (!silent) log(l10n.logScanWifiError('$e'), isError: true);
     } finally {
       _wifiNetworksLoading = false;
       notifyListeners();
@@ -430,15 +432,19 @@ class HomeController extends ChangeNotifier {
           ifaceCtrl.text = info.interfaceName;
         }
         if (!silent) {
-          log('Red actual: ${info.ssid}. Gateway: ${gatewayCtrl.text}, Interfaz: ${ifaceCtrl.text}.');
+          log(l10n.logCurrentNetwork(
+            info.ssid,
+            gatewayCtrl.text,
+            ifaceCtrl.text,
+          ));
         }
       } else {
-        if (!silent) log('No hay red Wi-Fi activa.');
+        if (!silent) log(l10n.logNoActiveWifi);
       }
       notifyListeners();
       return info;
     } catch (e) {
-      if (!silent) log('Error obteniendo red actual: $e', isError: true);
+      if (!silent) log(l10n.logCurrentNetworkError('$e'), isError: true);
       notifyListeners();
       return null;
     }
@@ -448,9 +454,9 @@ class HomeController extends ChangeNotifier {
 
   String friendlyRdpProfile(String value) {
     return switch (value) {
-      'stable' => 'Máxima estabilidad',
-      'speed' => 'Máxima velocidad',
-      _ => 'Adaptativo',
+      'stable' => l10n.profileStable,
+      'speed' => l10n.profileSpeed,
+      _ => l10n.profileAdaptive,
     };
   }
 
@@ -474,7 +480,7 @@ class HomeController extends ChangeNotifier {
     rdpPortCtrl.text = preset.port.toString();
     selectedServerPresetId = preset.id;
     if (announce) {
-      log('Preset aplicado: ${preset.label} (${preset.host})');
+      log(l10n.logPresetApplied(preset.label, preset.host));
       notifyListeners();
     }
   }
@@ -483,7 +489,7 @@ class HomeController extends ChangeNotifier {
     bool updateGuidance = true,
   }) async {
     if (serverPresets.isEmpty) return null;
-    log('Diagnosticando mejor servidor...', isError: false);
+    log(l10n.logDiagnosingBestServer, isError: false);
     final responses = <MapEntry<ServerPreset, int>>[];
     // Los cinco destinos se prueban en paralelo para no encadenar sus tiempos
     // de espera; se conserva el de menor latencia TCP.
@@ -498,11 +504,11 @@ class HomeController extends ChangeNotifier {
                 label: preset.label,
               );
               if (ms != null && ms > 0) {
-                log('Servidor ${preset.label} responde en ${ms}ms');
+                log(l10n.logServerResponded(preset.label, ms));
                 responses.add(MapEntry(preset, ms));
               }
             } catch (e) {
-              log('Servidor ${preset.label} no respondió: $e');
+              log(l10n.logServerNoResponse(preset.label, '$e'));
             }
           }(),
     ]);
@@ -517,15 +523,14 @@ class HomeController extends ChangeNotifier {
     }
     if (best != null) {
       if (bestMs != null) {
-        log('Mejor servidor: ${best.label} (${bestMs}ms).');
+        log(l10n.logBestServer(best.label, bestMs));
       }
       if (updateGuidance) applyServerPreset(best, announce: false);
       return best;
     }
     final fallback = serverPresets.first;
     log(
-      'Ningún servidor preconfigurado respondió. Se usará ${fallback.label} '
-      'para intentar la conexión.',
+      l10n.logNoServerResponded(fallback.label),
       isError: true,
     );
     if (updateGuidance) applyServerPreset(fallback, announce: false);
@@ -545,33 +550,33 @@ class HomeController extends ChangeNotifier {
           await syncCurrentWifiInfo(silent: false);
         }
         setGuidance(
-          'Wi-Fi del hospital listo',
+          l10n.guidanceWifiReadyTitle,
           bullets: [
-            'La red ya quedó conectada en Windows.',
+            l10n.guidanceWifiReadyBullet1,
             gatewayCtrl.text.trim().isEmpty
-                ? 'Gateway pendiente: usa "Detectar red actual" si no se completa.'
-                : 'Gateway: ${gatewayCtrl.text.trim()}',
+                ? l10n.gatewayPending
+                : l10n.gatewayValue(gatewayCtrl.text.trim()),
             ifaceCtrl.text.trim().isEmpty
-                ? 'Interfaz pendiente: usa "Detectar red actual" si no se completa.'
-                : 'Interfaz: ${ifaceCtrl.text.trim()}',
-            'Ahora puedes pulsar "Conectar y abrir RDP".',
+                ? l10n.interfacePending
+                : l10n.interfaceValue(ifaceCtrl.text.trim()),
+            l10n.guidanceWifiReadyBullet4,
           ],
         );
         await saveSettings();
       } else {
         setGuidance(
-          'No se completó la conexión Wi-Fi',
+          l10n.guidanceWifiFailedTitle,
           bullets: [
-            'Verifica que la red del hospital esté seleccionada.',
-            'Confirma la contraseña e inténtalo de nuevo.',
-            'Si es red abierta, deja la contraseña vacía.',
-            'Si Windows tarda en responder, espera unos segundos y pulsa otra vez.',
+            l10n.guidanceWifiFailedBullet1,
+            l10n.guidanceWifiFailedBullet2,
+            l10n.guidanceWifiFailedBullet3,
+            l10n.guidanceWifiFailedBullet4,
           ],
           isError: true,
         );
       }
     } catch (e) {
-      log('Error conectando Wi-Fi: $e', isError: true);
+      log(l10n.logWifiError('$e'), isError: true);
       setErrorGuidance(e);
     } finally {
       wifiPasswordCtrl.clear();
@@ -599,16 +604,14 @@ class HomeController extends ChangeNotifier {
       final hasGateway = info.gateway.trim().isNotEmpty;
       if (!hasInterface || !hasGateway) {
         if (attempt == 0 || attempt == 3 || attempt == 6 || attempt == 9) {
-          log(
-            'Windows ya ve la red "$ssid", esperando interfaz y gateway...',
-          );
+          log(l10n.logWaitingForWifiDetails(ssid));
         }
         stableAttempts = 0;
         continue;
       }
       stableAttempts++;
       if (stableAttempts >= 2) {
-        log('Windows confirmó la red "$ssid" con parámetros estables.');
+        log(l10n.logWifiConfirmed(ssid));
         return info;
       }
     }
@@ -622,12 +625,12 @@ class HomeController extends ChangeNotifier {
     final selectedWifi = resolvedWifiSsid();
     if (selectedWifi.isEmpty) {
       if (requireSelection) {
-        log('No hay Wi-Fi seleccionado para conectar.', isError: true);
+        log(l10n.logNoWifiSelected, isError: true);
       }
       return false;
     }
     final password = wifiPasswordCtrl.text;
-    log('Conectando a Wi-Fi: $selectedWifi...');
+    log(l10n.logConnectingWifi(selectedWifi));
     if (wifiManager != null) {
       final res =
           await wifiManager!.connect(ssid: selectedWifi, password: password);
@@ -636,8 +639,9 @@ class HomeController extends ChangeNotifier {
       final confirmed = await waitForTargetWifiConnection(selectedWifi);
       if (confirmed == null) {
         log(
-          'El sistema no confirmó la red "$selectedWifi". '
-          '${res.trim().isEmpty ? '' : 'Respuesta: $res'}',
+          res.trim().isEmpty
+              ? l10n.logWifiNotConfirmed(selectedWifi)
+              : l10n.logWifiNotConfirmedWithResponse(selectedWifi, res),
           isError: true,
         );
         return false;
@@ -676,14 +680,13 @@ class HomeController extends ChangeNotifier {
       if (defaultInterface.toLowerCase() != hospitalInterface.toLowerCase()) {
         return;
       }
-      final gatewaySuffix =
-          defaultGateway.isEmpty ? '' : ' (gateway $defaultGateway)';
       log(
-        'Aviso: la ruta por defecto de Windows sigue saliendo por '
-        '"$defaultInterface"$gatewaySuffix. Eso significa que el '
-        'Internet general tambien usa esa interfaz. Para mantener '
-        'Internet normal mientras HIS va por rutas especificas, '
-        'necesitas otra interfaz activa para la salida a Internet.',
+        defaultGateway.isEmpty
+            ? l10n.logDefaultRouteWarning(defaultInterface)
+            : l10n.logDefaultRouteWarningWithGateway(
+                defaultInterface,
+                defaultGateway,
+              ),
         isError: true,
       );
     } catch (_) {
@@ -696,7 +699,7 @@ class HomeController extends ChangeNotifier {
     if (raw.isEmpty) return 3389;
     final v = int.tryParse(raw);
     if (v == null || v <= 0 || v > 65535) {
-      log('Puerto RDP inválido ("$raw"). Se usará 3389.', isError: true);
+      log(l10n.logInvalidRdpPort(raw), isError: true);
       return 3389;
     }
     return v;
@@ -718,9 +721,9 @@ class HomeController extends ChangeNotifier {
       final delay = delays[attempt];
       if (delay > Duration.zero) {
         log(
-          'Reintentando acceso TCP al servidor'
-          '${label == null ? '' : ' $label'} '
-          '($attempt/${delays.length - 1})...',
+          label == null
+              ? l10n.logRetryingTcpNoLabel(attempt, delays.length - 1)
+              : l10n.logRetryingTcp(label, attempt, delays.length - 1),
         );
         await Future<void>.delayed(delay);
       }
@@ -728,7 +731,7 @@ class HomeController extends ChangeNotifier {
       if (latency != null) {
         best = best == null ? latency : (latency < best ? latency : best);
         if (attempt > 0) {
-          log('El servidor respondió en el reintento ${attempt + 1}.');
+          log(l10n.logServerRetrySuccess(attempt + 1));
         }
         break;
       }
@@ -742,7 +745,7 @@ class HomeController extends ChangeNotifier {
     _busy = true;
     _step = ConnectionStep.diagnostics;
     notifyListeners();
-    log('Iniciando diagnósticos de red…');
+    log(l10n.logDiagnosticsStart);
 
     try {
       await _saveSettingsSafely();
@@ -750,36 +753,36 @@ class HomeController extends ChangeNotifier {
         final dns = await networkDiagnostics.flushDns();
         log(dns);
       } catch (e) {
-        log('No se pudo limpiar la caché DNS: $e', isError: true);
+        log(l10n.logDnsCacheError('$e'), isError: true);
       }
       try {
         final cache = await networkDiagnostics.clearNetworkCaches();
         log(cache);
       } catch (e) {
-        log('No se pudo limpiar la caché ARP: $e', isError: true);
+        log(l10n.logArpCacheError('$e'), isError: true);
       }
       try {
         final ping = await networkDiagnostics.ping('8.8.8.8');
         if (ping != null) {
-          log('Ping a 8.8.8.8: ${ping}ms');
+          log(l10n.logPingResult('8.8.8.8', ping));
         } else {
-          log('Ping a 8.8.8.8: inalcanzable', isError: true);
+          log(l10n.logPingUnreachable('8.8.8.8'), isError: true);
         }
       } catch (e) {
-        log('Ping a 8.8.8.8 falló: $e', isError: true);
+        log(l10n.logPingFailed('8.8.8.8', '$e'), isError: true);
       }
-      log('Diagnósticos completados.');
+      log(l10n.logDiagnosticsDone);
       setGuidance(
-        'Revisión básica completada',
+        l10n.guidanceDiagnosticsDoneTitle,
         bullets: [
-          'El diagnóstico terminó y dejó registro en la parte inferior.',
-          'Si el problema sigue, usa "Ayudarme a corregir" para revisar Wi-Fi, rutas y RDP.',
+          l10n.guidanceDiagnosticsDoneBullet1,
+          l10n.guidanceDiagnosticsDoneBullet2,
         ],
       );
       _step = ConnectionStep.idle;
       notifyListeners();
     } catch (e) {
-      log('Diagnósticos fallaron: $e', isError: true);
+      log(l10n.logDiagnosticsFailed('$e'), isError: true);
       setErrorGuidance(e);
       _step = ConnectionStep.error;
       notifyListeners();
@@ -800,30 +803,36 @@ class HomeController extends ChangeNotifier {
     _busy = true;
     _step = ConnectionStep.diagnostics;
     notifyListeners();
-    log('Iniciando solucionador de problemas de conexión…');
+    log(l10n.logTroubleshooterStart);
 
     try {
       await saveSettings();
       final wifiInfo = await syncCurrentWifiInfo(silent: true);
       if (wifiInfo == null || wifiInfo.ssid.trim().isEmpty) {
-        log('No se detecta una red Wi-Fi activa.', isError: true);
-        findings.add('No hay una red Wi-Fi activa detectada en Windows.');
+        log(l10n.logNoActiveWifiError, isError: true);
+        findings.add(l10n.findingNoActiveWifi);
       } else {
         log(
-          'Wi-Fi actual: ${wifiInfo.ssid} | Interfaz: ${wifiInfo.interfaceName.isEmpty ? 'sin dato' : wifiInfo.interfaceName} | Gateway: ${wifiInfo.gateway.isEmpty ? 'sin dato' : wifiInfo.gateway}.',
+          l10n.logCurrentWifiSummary(
+            wifiInfo.ssid,
+            wifiInfo.interfaceName.isEmpty
+                ? l10n.valueNotAvailable
+                : wifiInfo.interfaceName,
+            wifiInfo.gateway.isEmpty
+                ? l10n.valueNotAvailable
+                : wifiInfo.gateway,
+          ),
         );
       }
 
       if (gateway.isEmpty || iface.isEmpty) {
         log(
-          'Faltan gateway o interfaz en la configuración avanzada.',
+          l10n.logMissingGatewayInterface,
           isError: true,
         );
-        findings.add(
-          'Falta completar gateway o interfaz en las opciones avanzadas.',
-        );
+        findings.add(l10n.findingMissingGatewayInterface);
       } else {
-        log('Configuración base lista: gateway $gateway, interfaz $iface.');
+        log(l10n.logBaseConfigReady(gateway, iface));
       }
 
       if (preferMostStableServer &&
@@ -837,13 +846,11 @@ class HomeController extends ChangeNotifier {
 
       final available = await rdpLauncher.isRdpClientAvailable();
       log(
-        available
-            ? 'Cliente RDP disponible.'
-            : 'No se encontró un cliente RDP disponible.',
+        available ? l10n.logRdpClientAvailable : l10n.logRdpClientUnavailable,
         isError: !available,
       );
       if (!available) {
-        findings.add('Windows no reporta un cliente RDP disponible.');
+        findings.add(l10n.findingRdpClientUnavailable);
       }
 
       if (subnets.isNotEmpty && gateway.isNotEmpty && iface.isNotEmpty) {
@@ -853,28 +860,27 @@ class HomeController extends ChangeNotifier {
           interfaceName: iface,
         );
         if (missingRoutes.isEmpty) {
-          log('Las rutas del hospital ya están presentes.');
+          log(l10n.logRoutesPresent);
         } else {
+          final routes = missingRoutes.join(', ');
           log(
-            'Faltan rutas del hospital: ${missingRoutes.join(', ')}.',
+            l10n.logRoutesMissing(routes),
             isError: true,
           );
-          findings.add(
-            'Aún faltan rutas del hospital: ${missingRoutes.join(', ')}.',
-          );
+          findings.add(l10n.findingRoutesMissing(routes));
         }
       }
 
       if (resolvedHost.isEmpty) {
-        log('Falta el host RDP para completar la prueba.', isError: true);
-        findings.add('Falta escribir el host o IP del servidor RDP.');
+        log(l10n.logMissingRdpHost, isError: true);
+        findings.add(l10n.findingMissingRdpHost);
       } else {
         final ping = await networkDiagnostics.ping(resolvedHost);
         if (ping != null) {
-          log('ICMP hacia $resolvedHost: ${ping}ms.');
+          log(l10n.logIcmpResult(resolvedHost, ping));
         } else {
           log(
-            'El host $resolvedHost no respondió a ICMP. Puede ser normal si el servidor bloquea ping.',
+            l10n.logIcmpUnreachable(resolvedHost),
             isError: true,
           );
         }
@@ -884,30 +890,34 @@ class HomeController extends ChangeNotifier {
             selectAdaptiveRdpProfile(tcp),
           );
           log(
-            'TCP $resolvedPort abierto en $resolvedHost (${tcp}ms). Perfil recomendado: $suggestedProfile.',
+            l10n.logTcpOpen(
+              resolvedPort,
+              resolvedHost,
+              tcp,
+              suggestedProfile,
+            ),
           );
         } else {
           log(
-            'No se pudo abrir TCP $resolvedPort en $resolvedHost. Revisa rutas, firewall o disponibilidad del servidor.',
+            l10n.logTcpFailed(resolvedPort, resolvedHost),
             isError: true,
           );
-          findings
-              .add('El servidor RDP no respondió por el puerto $resolvedPort.');
+          findings.add(l10n.findingRdpDidNotRespond(resolvedPort));
         }
       }
 
-      log('Solucionador completado.');
+      log(l10n.logTroubleshooterDone);
       if (findings.isEmpty) {
         setGuidance(
-          'Todo parece listo para conectar',
+          l10n.guidanceAllReadyTitle,
           bullets: [
-            'Wi-Fi, rutas y cliente RDP se ven correctos.',
-            'Ya puedes pulsar "Conectar y abrir RDP".',
+            l10n.guidanceAllReadyBullet1,
+            l10n.guidanceAllReadyBullet2,
           ],
         );
       } else {
         setGuidance(
-          'Encontré puntos para corregir',
+          l10n.guidanceIssuesFoundTitle,
           bullets: findings,
           isError: true,
         );
@@ -915,7 +925,7 @@ class HomeController extends ChangeNotifier {
       _step = ConnectionStep.idle;
       notifyListeners();
     } catch (e) {
-      log('Solucionador falló: $e', isError: true);
+      log(l10n.logTroubleshooterFailed('$e'), isError: true);
       setErrorGuidance(e);
       _step = ConnectionStep.error;
       notifyListeners();
@@ -930,10 +940,7 @@ class HomeController extends ChangeNotifier {
     final subnets = parseSubnets();
 
     if (subnets.isEmpty) {
-      log(
-        'Configuración inválida: agrega al menos una subred del hospital.',
-        isError: true,
-      );
+      log(l10n.logInvalidNoSubnets, isError: true);
       return;
     }
 
@@ -960,12 +967,12 @@ class HomeController extends ChangeNotifier {
       final port = parsePort();
 
       if (host.isEmpty) {
-        log('Configuración inválida: host RDP es obligatorio.', isError: true);
+        log(l10n.logInvalidNoHost, isError: true);
         setGuidance(
-          'Falta el servidor RDP',
+          l10n.guidanceMissingRdpServerTitle,
           bullets: [
-            'Escribe el host o la IP del servidor.',
-            'También puedes elegir un servidor preconfigurado.',
+            l10n.guidanceMissingRdpServerBullet1,
+            l10n.guidanceMissingRdpServerBullet2,
           ],
           isError: true,
         );
@@ -974,7 +981,7 @@ class HomeController extends ChangeNotifier {
 
       // Intentar detectar gateway/interfaz si faltan
       if (gateway.isEmpty || iface.isEmpty) {
-        log('Detectando gateway/interfaz...');
+        log(l10n.logDetectingGateway);
         try {
           await syncCurrentWifiInfo(silent: true);
         } catch (_) {}
@@ -994,16 +1001,13 @@ class HomeController extends ChangeNotifier {
       }
 
       if (gateway.isEmpty || iface.isEmpty) {
-        log(
-          'Faltan gateway o interfaz. Usa "Detectar red actual" o completa los campos en Opciones avanzadas.',
-          isError: true,
-        );
+        log(l10n.logMissingGatewayInterfaceHint, isError: true);
         setGuidance(
-          'Faltan datos de red',
+          l10n.guidanceMissingNetworkDataTitle,
           bullets: [
-            'No se detectó gateway o interfaz automáticamente.',
-            'Pulsa "Detectar red actual" o complétalos manualmente.',
-            'Asegúrate de estar conectado a la red del hospital.',
+            l10n.guidanceMissingNetworkDataBullet1,
+            l10n.guidanceMissingNetworkDataBullet2,
+            l10n.guidanceMissingNetworkDataBullet3,
           ],
           isError: true,
         );
@@ -1011,7 +1015,7 @@ class HomeController extends ChangeNotifier {
       }
 
       if (_splitTunnelActive) {
-        log('Cerrando el túnel anterior antes de reconectar…');
+        log(l10n.logClosingPreviousTunnel);
         try {
           await routeManager.disableSplitTunnel();
           _splitTunnelActive = false;
@@ -1019,7 +1023,7 @@ class HomeController extends ChangeNotifier {
             await settings?.clearPendingSplitTunnelCleanup();
           } catch (_) {}
         } catch (e) {
-          log('No se pudo cerrar el túnel anterior: $e', isError: true);
+          log(l10n.logCloseTunnelError('$e'), isError: true);
           setErrorGuidance(e);
           return;
         }
@@ -1038,7 +1042,7 @@ class HomeController extends ChangeNotifier {
         wifiPassword: wifiPasswordCtrl.text,
         onSelectServer: shouldAutoSelect
             ? () async {
-                log('Seleccionando automáticamente el servidor más estable…');
+                log(l10n.logSelectingBestServer);
                 try {
                   final best =
                       await diagnoseBestServerPreset(updateGuidance: true);
@@ -1046,7 +1050,7 @@ class HomeController extends ChangeNotifier {
                   return (host: best.host, port: best.port);
                 } catch (e) {
                   log(
-                    'No se pudo seleccionar el mejor servidor: $e',
+                    l10n.logSelectBestServerError('$e'),
                     isError: true,
                   );
                   return null;
@@ -1085,10 +1089,10 @@ class HomeController extends ChangeNotifier {
         if (state.isFinished && !state.isError) {
           await _saveSettingsSafely();
           setGuidance(
-            'La conexión quedó iniciada',
+            l10n.guidanceConnectedTitle,
             bullets: [
-              'Si la ventana de Escritorio remoto aparece, continúa el ingreso normalmente.',
-              'Si necesitas cerrar la conexión técnica, pulsa "Desconectar túnel".',
+              l10n.guidanceConnectedBullet1,
+              l10n.guidanceConnectedBullet2,
             ],
           );
         } else if (state.isFinished && state.isError) {
@@ -1111,7 +1115,7 @@ class HomeController extends ChangeNotifier {
     clearGuidance();
     _busy = true;
     notifyListeners();
-    log('Desconectando: deshabilitando túnel dividido…');
+    log(l10n.logDisconnecting);
     try {
       final msg = await routeManager.disableSplitTunnel();
       log(msg);
@@ -1119,12 +1123,12 @@ class HomeController extends ChangeNotifier {
       try {
         await settings?.clearPendingSplitTunnelCleanup();
       } catch (e) {
-        log('No se pudo limpiar el registro de rutas: $e', isError: true);
+        log(l10n.logClearRouteRecordError('$e'), isError: true);
       }
       notifyListeners();
       setReadyGuidance();
     } catch (e) {
-      log('Error al desconectar: $e', isError: true);
+      log(l10n.logDisconnectError('$e'), isError: true);
       setErrorGuidance(e);
     } finally {
       _busy = false;
@@ -1152,7 +1156,7 @@ class HomeController extends ChangeNotifier {
     _selectedServerPresetId = s.selectedServerPresetId;
     wifiPasswordCtrl.clear();
     notifyListeners();
-    log('Ajustes restablecidos a predeterminados.');
+    log(l10n.logSettingsReset);
     refreshWifiNetworks(silent: true);
     syncCurrentWifiInfo(silent: true);
   }

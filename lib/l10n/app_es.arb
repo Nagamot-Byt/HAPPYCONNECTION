@@ -46,5 +46,582 @@
   "saveSettings": "Guardar ajustes",
   "resetSettings": "Restablecer",
   "activityLogs": "Registro de Actividad",
-  "activityLogsHelp": "Muestra el progreso paso a paso de las conexiones y diagnósticos."
+  "activityLogsHelp": "Muestra el progreso paso a paso de las conexiones y diagnósticos.",
+  "statusTunnelActive": "Túnel dividido activo",
+  "statusLoading": "Cargando…",
+  "stepPreparing": "Preparando conexión…",
+  "stepConfiguringRoutes": "Configurando rutas…",
+  "stepVerifyingTarget": "Verificando destino y cliente RDP…",
+  "stepLaunchingRdp": "Lanzando RDP…",
+  "stepConnected": "Conectado",
+  "stepError": "Error",
+  "resetSettingsTitle": "Restablecer ajustes",
+  "resetSettingsConfirm": "Se borrarán las subredes, credenciales RDP y preferencias guardadas. ¿Continuar?",
+  "cancel": "Cancelar",
+  "resetAction": "Restablecer",
+  "currentWifi": "Wi-Fi actual: {ssid}",
+  "@currentWifi": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "wifiNoNativeHelper": "En esta plataforma la conexión Wi-Fi debe hacerse desde los ajustes del sistema. La app seguirá ayudando con diagnóstico y apertura del cliente RDP.",
+  "wifiSelectHint": "Selecciona la red, escribe la contraseña y la app intentará completar automáticamente la configuración de red necesaria.",
+  "wifiPasswordHint": "No se guarda automáticamente",
+  "wifiNoHelperTip": "Consejo: conéctate primero a la red necesaria desde los ajustes del sistema y luego vuelve aquí para revisar estabilidad y abrir RDP.",
+  "advancedOptionsSubtitle": "Solo si quieres revisar o ajustar la configuración técnica",
+  "advancedValuesHint": "Estos valores se pueden completar automáticamente después de conectarte al Wi-Fi.",
+  "detectCurrentNetwork": "Detectar red actual",
+  "gatewayHint": "ej: 192.168.1.1",
+  "interfaceHint": "ej: Wi-Fi, Ethernet",
+  "hospitalSubnetsOnePerLine": "Subredes del hospital (una por línea)",
+  "hospitalSubnetsHint": "10.0.0.0/8",
+  "otherNetwork": "Otra red…",
+  "wifiNetworkLabel": "Red Wi-Fi",
+  "wifiNetworkName": "Nombre de la red Wi-Fi",
+  "wifiNetworkNameHint": "Ej: Hospital-Staff",
+  "serverPresetLabel": "Servidor preconfigurado",
+  "manual": "Manual",
+  "presetPending": "{label} - pendiente por configurar",
+  "@presetPending": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "presetPendingTitle": "Servidor pendiente de configuración",
+  "presetPendingBullet1": "Ese cupo ya quedó reservado.",
+  "presetPendingBullet2": "En cuanto me compartas los 5 servidores, lo dejo operativo.",
+  "autoSelectServer": "Elegir automáticamente el servidor más estable",
+  "presetsEmptySubtitle": "La estructura para servidores ya está lista; falta cargar los datos reales.",
+  "presetsReadySubtitle": "La app medirá respuesta TCP y usará el mejor servidor disponible.",
+  "diagnoseBestServer": "Diagnosticar mejor servidor",
+  "rdpHostLabel": "Host / IP RDP",
+  "rdpHostHint": "serv_pediatrico.huv.gov.co",
+  "rdpPortLabel": "Puerto",
+  "rdpUserOptional": "Usuario (opcional)",
+  "rdpDomainOptional": "Dominio (opcional)",
+  "rdpProfileExplanation": "Adaptativo elige el perfil según la latencia al servidor. Máxima estabilidad reduce funciones visuales y reintenta más. Máxima velocidad recorta redirecciones para abrir antes.",
+  "presetPediatric": "Pediatría",
+  "presetGynecology": "Ginecología",
+  "presetMobile": "Móviles",
+  "presetOutpatient": "Consulta Externa",
+  "presetEmergency": "Urgencias",
+  "noRecentActivity": "No hay actividad reciente.",
+  "stepPrepare": "Preparar",
+  "stepTunnel": "Túnel",
+  "stepVerify": "Verificar",
+  "stepOpenRdp": "Abrir RDP",
+  "valueNotAvailable": "sin dato",
+  "guidanceAdminErrorBullet3": "Si ya está como administrador, verifica el UAC.",
+  "guidanceWifiErrorBullet3": "Para redes abiertas deja la contraseña vacía.",
+  "guidanceRouteErrorTitle": "Problema con rutas/gateway",
+  "guidanceRouteErrorBullet1": "Usa \"Detectar red actual\" para actualizar gateway e interfaz.",
+  "guidanceRouteErrorBullet2": "Asegúrate de estar conectado a la red del hospital.",
+  "guidanceRouteErrorBullet3": "Verifica que las subredes hospitalarias sean correctas.",
+  "guidanceRouteErrorBullet4": "Requiere permisos de Administrador para agregar rutas.",
+  "guidanceRdpErrorTitle": "Problema con RDP/puerto 3389",
+  "guidanceRdpErrorBullet1": "Verifica que el servidor RDP sea accesible por el puerto configurado.",
+  "guidanceRdpErrorBullet2": "Usa \"Ayudarme a corregir\" para diagnosticar rutas y conectividad.",
+  "guidanceRdpErrorBullet3": "Asegúrate de tener el cliente RDP de Windows disponible.",
+  "guidanceGenericErrorTitle": "La conexión no se completó",
+  "guidanceGenericErrorBullet1": "Revisa el registro de actividad para ver el motivo exacto.",
+  "guidanceGenericErrorBullet2": "Usa \"Ayudarme a corregir\" para intentar reparar el problema automáticamente.",
+  "guidanceGenericErrorBullet3": "Si persiste, verifica permisos de Administrador y conexión Wi-Fi.",
+  "guidanceWifiReadyTitle": "Wi-Fi del hospital listo",
+  "guidanceWifiReadyBullet1": "La red ya quedó conectada en Windows.",
+  "gatewayPending": "Gateway pendiente: usa \"Detectar red actual\" si no se completa.",
+  "gatewayValue": "Gateway: {value}",
+  "@gatewayValue": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "interfacePending": "Interfaz pendiente: usa \"Detectar red actual\" si no se completa.",
+  "interfaceValue": "Interfaz: {value}",
+  "@interfaceValue": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "guidanceWifiReadyBullet4": "Ahora puedes pulsar \"Conectar y abrir RDP\".",
+  "guidanceWifiFailedTitle": "No se completó la conexión Wi-Fi",
+  "guidanceWifiFailedBullet1": "Verifica que la red del hospital esté seleccionada.",
+  "guidanceWifiFailedBullet2": "Confirma la contraseña e inténtalo de nuevo.",
+  "guidanceWifiFailedBullet3": "Si es red abierta, deja la contraseña vacía.",
+  "guidanceWifiFailedBullet4": "Si Windows tarda en responder, espera unos segundos y pulsa otra vez.",
+  "guidanceDiagnosticsDoneTitle": "Revisión básica completada",
+  "guidanceDiagnosticsDoneBullet1": "El diagnóstico terminó y dejó registro en la parte inferior.",
+  "guidanceDiagnosticsDoneBullet2": "Si el problema sigue, usa \"Ayudarme a corregir\" para revisar Wi-Fi, rutas y RDP.",
+  "guidanceAllReadyTitle": "Todo parece listo para conectar",
+  "guidanceAllReadyBullet1": "Wi-Fi, rutas y cliente RDP se ven correctos.",
+  "guidanceAllReadyBullet2": "Ya puedes pulsar \"Conectar y abrir RDP\".",
+  "guidanceIssuesFoundTitle": "Encontré puntos para corregir",
+  "guidanceMissingRdpServerTitle": "Falta el servidor RDP",
+  "guidanceMissingRdpServerBullet1": "Escribe el host o la IP del servidor.",
+  "guidanceMissingRdpServerBullet2": "También puedes elegir un servidor preconfigurado.",
+  "guidanceMissingNetworkDataTitle": "Faltan datos de red",
+  "guidanceMissingNetworkDataBullet1": "No se detectó gateway o interfaz automáticamente.",
+  "guidanceMissingNetworkDataBullet2": "Pulsa \"Detectar red actual\" o complétalos manualmente.",
+  "guidanceMissingNetworkDataBullet3": "Asegúrate de estar conectado a la red del hospital.",
+  "logStartup": "Iniciando MedLink Connect...",
+  "logLoadSettingsError": "No se pudieron cargar los ajustes guardados: {error}",
+  "@logLoadSettingsError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logCleanupSettingsError": "No se pudieron limpiar rutas de una sesión anterior: {error}",
+  "@logCleanupSettingsError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logStaleTunnelFound": "Detectado un túnel anterior sin cierre limpio; retirando rutas…",
+  "logStaleRoutesRemoved": "Rutas de la sesión anterior eliminadas.",
+  "logStaleRoutesFailed": "No se pudieron retirar todas las rutas previas: {error}",
+  "@logStaleRoutesFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logStorageUnavailable": "Almacenamiento no disponible; se usarán valores en memoria.",
+  "logSaveSettingsError": "No se pudieron guardar los ajustes: {error}",
+  "@logSaveSettingsError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logSearchingWifi": "Buscando redes Wi-Fi...",
+  "logNetworksFound": "{count, plural, =0{No se encontraron redes Wi-Fi.} =1{Se encontró 1 red Wi-Fi.} other{Se encontraron {count} redes Wi-Fi.}}",
+  "@logNetworksFound": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "logScanWifiError": "Error al buscar redes Wi-Fi: {error}",
+  "@logScanWifiError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logCurrentNetwork": "Red actual: {ssid}. Gateway: {gateway}, Interfaz: {iface}.",
+  "@logCurrentNetwork": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      },
+      "gateway": {
+        "type": "String"
+      },
+      "iface": {
+        "type": "String"
+      }
+    }
+  },
+  "logNoActiveWifi": "No hay red Wi-Fi activa.",
+  "logCurrentNetworkError": "Error obteniendo red actual: {error}",
+  "@logCurrentNetworkError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logPresetApplied": "Preset aplicado: {label} ({host})",
+  "@logPresetApplied": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "logDiagnosingBestServer": "Diagnosticando mejor servidor...",
+  "logServerResponded": "Servidor {label} responde en {ms}ms",
+  "@logServerResponded": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "logServerNoResponse": "Servidor {label} no respondió: {error}",
+  "@logServerNoResponse": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logBestServer": "Mejor servidor: {label} ({ms}ms).",
+  "@logBestServer": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "logNoServerResponded": "Ningún servidor preconfigurado respondió. Se usará {fallback} para intentar la conexión.",
+  "@logNoServerResponded": {
+    "placeholders": {
+      "fallback": {
+        "type": "String"
+      }
+    }
+  },
+  "logWifiError": "Error conectando Wi-Fi: {error}",
+  "@logWifiError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logWaitingForWifiDetails": "Windows ya ve la red \"{ssid}\", esperando interfaz y gateway...",
+  "@logWaitingForWifiDetails": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "logWifiConfirmed": "Windows confirmó la red \"{ssid}\" con parámetros estables.",
+  "@logWifiConfirmed": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "logNoWifiSelected": "No hay Wi-Fi seleccionado para conectar.",
+  "logConnectingWifi": "Conectando a Wi-Fi: {ssid}...",
+  "@logConnectingWifi": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "logWifiNotConfirmed": "El sistema no confirmó la red \"{ssid}\".",
+  "@logWifiNotConfirmed": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "logWifiNotConfirmedWithResponse": "El sistema no confirmó la red \"{ssid}\". Respuesta: {response}",
+  "@logWifiNotConfirmedWithResponse": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      },
+      "response": {
+        "type": "String"
+      }
+    }
+  },
+  "logDefaultRouteWarning": "Aviso: la ruta por defecto de Windows sigue saliendo por \"{iface}\". Eso significa que el Internet general tambien usa esa interfaz. Para mantener Internet normal mientras HIS va por rutas especificas, necesitas otra interfaz activa para la salida a Internet.",
+  "@logDefaultRouteWarning": {
+    "placeholders": {
+      "iface": {
+        "type": "String"
+      }
+    }
+  },
+  "logDefaultRouteWarningWithGateway": "Aviso: la ruta por defecto de Windows sigue saliendo por \"{iface}\" (gateway {gateway}). Eso significa que el Internet general tambien usa esa interfaz. Para mantener Internet normal mientras HIS va por rutas especificas, necesitas otra interfaz activa para la salida a Internet.",
+  "@logDefaultRouteWarningWithGateway": {
+    "placeholders": {
+      "iface": {
+        "type": "String"
+      },
+      "gateway": {
+        "type": "String"
+      }
+    }
+  },
+  "logInvalidRdpPort": "Puerto RDP inválido (\"{raw}\"). Se usará 3389.",
+  "@logInvalidRdpPort": {
+    "placeholders": {
+      "raw": {
+        "type": "String"
+      }
+    }
+  },
+  "logRetryingTcp": "Reintentando acceso TCP al servidor {label} ({attempt}/{max})...",
+  "@logRetryingTcp": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "attempt": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "logRetryingTcpNoLabel": "Reintentando acceso TCP al servidor ({attempt}/{max})...",
+  "@logRetryingTcpNoLabel": {
+    "placeholders": {
+      "attempt": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "logServerRetrySuccess": "El servidor respondió en el reintento {attempt}.",
+  "@logServerRetrySuccess": {
+    "placeholders": {
+      "attempt": {
+        "type": "int"
+      }
+    }
+  },
+  "logDiagnosticsStart": "Iniciando diagnósticos de red…",
+  "logDnsCacheError": "No se pudo limpiar la caché DNS: {error}",
+  "@logDnsCacheError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logArpCacheError": "No se pudo limpiar la caché ARP: {error}",
+  "@logArpCacheError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logPingResult": "Ping a {host}: {ms}ms",
+  "@logPingResult": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "logPingUnreachable": "Ping a {host}: inalcanzable",
+  "@logPingUnreachable": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "logPingFailed": "Ping a {host} falló: {error}",
+  "@logPingFailed": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logDiagnosticsDone": "Diagnósticos completados.",
+  "logDiagnosticsFailed": "Diagnósticos fallaron: {error}",
+  "@logDiagnosticsFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logTroubleshooterStart": "Iniciando solucionador de problemas de conexión…",
+  "logNoActiveWifiError": "No se detecta una red Wi-Fi activa.",
+  "findingNoActiveWifi": "No hay una red Wi-Fi activa detectada en Windows.",
+  "logCurrentWifiSummary": "Wi-Fi actual: {ssid} | Interfaz: {iface} | Gateway: {gateway}.",
+  "@logCurrentWifiSummary": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      },
+      "iface": {
+        "type": "String"
+      },
+      "gateway": {
+        "type": "String"
+      }
+    }
+  },
+  "logMissingGatewayInterface": "Faltan gateway o interfaz en la configuración avanzada.",
+  "findingMissingGatewayInterface": "Falta completar gateway o interfaz en las opciones avanzadas.",
+  "logBaseConfigReady": "Configuración base lista: gateway {gateway}, interfaz {iface}.",
+  "@logBaseConfigReady": {
+    "placeholders": {
+      "gateway": {
+        "type": "String"
+      },
+      "iface": {
+        "type": "String"
+      }
+    }
+  },
+  "logRdpClientAvailable": "Cliente RDP disponible.",
+  "logRdpClientUnavailable": "No se encontró un cliente RDP disponible.",
+  "findingRdpClientUnavailable": "Windows no reporta un cliente RDP disponible.",
+  "logRoutesPresent": "Las rutas del hospital ya están presentes.",
+  "logRoutesMissing": "Faltan rutas del hospital: {routes}.",
+  "@logRoutesMissing": {
+    "placeholders": {
+      "routes": {
+        "type": "String"
+      }
+    }
+  },
+  "findingRoutesMissing": "Aún faltan rutas del hospital: {routes}.",
+  "@findingRoutesMissing": {
+    "placeholders": {
+      "routes": {
+        "type": "String"
+      }
+    }
+  },
+  "logMissingRdpHost": "Falta el host RDP para completar la prueba.",
+  "findingMissingRdpHost": "Falta escribir el host o IP del servidor RDP.",
+  "logIcmpResult": "ICMP hacia {host}: {ms}ms.",
+  "@logIcmpResult": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "logIcmpUnreachable": "El host {host} no respondió a ICMP. Puede ser normal si el servidor bloquea ping.",
+  "@logIcmpUnreachable": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "logTcpOpen": "TCP {port} abierto en {host} ({ms}ms). Perfil recomendado: {profile}.",
+  "@logTcpOpen": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      },
+      "host": {
+        "type": "String"
+      },
+      "ms": {
+        "type": "int"
+      },
+      "profile": {
+        "type": "String"
+      }
+    }
+  },
+  "logTcpFailed": "No se pudo abrir TCP {port} en {host}. Revisa rutas, firewall o disponibilidad del servidor.",
+  "@logTcpFailed": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      },
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "findingRdpDidNotRespond": "El servidor RDP no respondió por el puerto {port}.",
+  "@findingRdpDidNotRespond": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      }
+    }
+  },
+  "logTroubleshooterDone": "Solucionador completado.",
+  "logTroubleshooterFailed": "Solucionador falló: {error}",
+  "@logTroubleshooterFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logInvalidNoSubnets": "Configuración inválida: agrega al menos una subred del hospital.",
+  "logInvalidNoHost": "Configuración inválida: host RDP es obligatorio.",
+  "logDetectingGateway": "Detectando gateway/interfaz...",
+  "logMissingGatewayInterfaceHint": "Faltan gateway o interfaz. Usa \"Detectar red actual\" o completa los campos en Opciones avanzadas.",
+  "logClosingPreviousTunnel": "Cerrando el túnel anterior antes de reconectar…",
+  "logCloseTunnelError": "No se pudo cerrar el túnel anterior: {error}",
+  "@logCloseTunnelError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logSelectingBestServer": "Seleccionando automáticamente el servidor más estable…",
+  "logSelectBestServerError": "No se pudo seleccionar el mejor servidor: {error}",
+  "@logSelectBestServerError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logDisconnecting": "Desconectando: deshabilitando túnel dividido…",
+  "logClearRouteRecordError": "No se pudo limpiar el registro de rutas: {error}",
+  "@logClearRouteRecordError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logDisconnectError": "Error al desconectar: {error}",
+  "@logDisconnectError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logSettingsReset": "Ajustes restablecidos a predeterminados."
 }

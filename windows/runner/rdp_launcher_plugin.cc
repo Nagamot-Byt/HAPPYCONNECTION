@@ -403,6 +403,7 @@ static std::unique_ptr<EncodableValue> HandleLaunchRdp(
             std::to_string(static_cast<int>(launch.win_error));
         return std::make_unique<EncodableValue>(
             ErrPair("lanzamiento_fallido", msg));
+      }
     }
   }
 

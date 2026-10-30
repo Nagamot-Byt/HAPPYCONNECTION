@@ -203,15 +203,17 @@ static EncodableMap GetCurrentInfoMapNative() {
       }
 
       DWORD connectInfoSize = 0;
-      PWLAN_CONNECTION_ATTRIBUTES* pConnectInfo = NULL;
+      PVOID rawConnectInfo = NULL;
       if (WlanQueryInterface(wlan.get(), &pIfInfo->InterfaceGuid,
                              wlan_intf_opcode_current_connection,
-                             NULL, &connectInfoSize, (PVOID*)&pConnectInfo, NULL) == ERROR_SUCCESS) {
+                             NULL, &connectInfoSize, &rawConnectInfo, NULL) == ERROR_SUCCESS) {
+        auto* pConnectInfo =
+            static_cast<PWLAN_CONNECTION_ATTRIBUTES>(rawConnectInfo);
         std::string ssid(
             (const char*)pConnectInfo->wlanAssociationAttributes.dot11Ssid.ucSSID,
             pConnectInfo->wlanAssociationAttributes.dot11Ssid.uSSIDLength);
         out[EncodableValue("ssid")] = EncodableValue(ssid);
-        WlanFreeMemory(pConnectInfo);
+        WlanFreeMemory(rawConnectInfo);
       }
       break;
     }
@@ -326,8 +328,11 @@ static void HandleConnect(const EncodableValue* args, MethodResultPtr result) {
     if (!password.empty()) {
       std::wstring profileXml = BuildWpa2ProfileXml(wssid, U8ToW(password));
       DWORD reasonCode = 0;
-      if (WlanSetProfile(wlan.get(), &interfaceGuid, 0, profileXml.c_str(), NULL, FALSE, NULL, &reasonCode) != ERROR_SUCCESS) {
-        if (reasonCode == WLAN_REASON_CODE_PROFILE_ALREADY_EXISTS) {
+      const DWORD setProfileResult =
+          WlanSetProfile(wlan.get(), &interfaceGuid, 0, profileXml.c_str(),
+                         NULL, FALSE, NULL, &reasonCode);
+      if (setProfileResult != ERROR_SUCCESS) {
+        if (setProfileResult == ERROR_ALREADY_EXISTS) {
           profile_note = L"Ya existía un perfil Wi-Fi para \"" + wssid + L"\". Se reutilizará el perfil guardado.";
         } else {
           profile_note = L"No se pudo actualizar el perfil Wi-Fi (código " + std::to_wstring(reasonCode) + L"). Se intentará conectar con perfil existente.";
@@ -376,7 +381,7 @@ static void HandleConnect(const EncodableValue* args, MethodResultPtr result) {
       dot11Ssid.uSSIDLength = (ULONG)ssid.length();
       if (dot11Ssid.uSSIDLength > 32) dot11Ssid.uSSIDLength = 32;
       memcpy(dot11Ssid.ucSSID, ssid.c_str(), dot11Ssid.uSSIDLength);
-      connParams.wlanConnectionMode = wlan_connection_mode_discovery_unmanaged;
+      connParams.wlanConnectionMode = wlan_connection_mode_discovery_unsecure;
       connParams.strProfile = NULL;
       connParams.pDot11Ssid = &dot11Ssid;
       connParams.dwFlags = WLAN_CONNECTION_HIDDEN_NETWORK;

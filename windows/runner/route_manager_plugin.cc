@@ -545,13 +545,11 @@ static std::unique_ptr<EncodableValue> HandleGetPrimaryDefaultRouteInfo() {
   inet_ntop(AF_INET, &best_row.NextHop.Ipv4.sin_addr, gw_str,
             INET_ADDRSTRLEN);
 
-  std::wstring alias(best_row.InterfaceAlias);
-  if (alias.empty()) {
-    wchar_t buffer[IF_MAX_STRING_SIZE + 1] = {0};
-    if (ConvertInterfaceLuidToAlias(&best_row.InterfaceLuid, buffer,
-                                    IF_MAX_STRING_SIZE + 1) == NO_ERROR) {
-      alias = buffer;
-    }
+  std::wstring alias;
+  wchar_t buffer[IF_MAX_STRING_SIZE + 1] = {0};
+  if (ConvertInterfaceLuidToAlias(&best_row.InterfaceLuid, buffer,
+                                  IF_MAX_STRING_SIZE + 1) == NO_ERROR) {
+    alias = buffer;
   }
 
   out[EncodableValue("interfaceName")] = EncodableValue(WToU8(alias));
@@ -574,7 +572,12 @@ static std::unique_ptr<EncodableValue> HandleListInterfaces() {
 
   std::vector<std::string> seen;
   for (ULONG i = 0; i < table->NumEntries; ++i) {
-    const std::string alias = WToU8(table->Table[i].InterfaceAlias);
+    wchar_t buffer[IF_MAX_STRING_SIZE + 1] = {0};
+    if (ConvertInterfaceLuidToAlias(&table->Table[i].InterfaceLuid, buffer,
+                                    IF_MAX_STRING_SIZE + 1) != NO_ERROR) {
+      continue;
+    }
+    const std::string alias = WToU8(buffer);
     if (alias.empty()) continue;
     bool duplicate = false;
     for (const auto& existing : seen) {

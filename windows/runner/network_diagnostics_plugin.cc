@@ -30,28 +30,6 @@ using MethodResultPtr = std::unique_ptr<flutter::MethodResult<EncodableValue>>;
 using MethodChannelPtr =
     std::unique_ptr<flutter::MethodChannel<EncodableValue>>;
 
-static EncodableValue ErrPair(const std::string& code,
-                              const std::string& msg) {
-  return flutter::CustomEncodableValue(std::make_pair(code, msg));
-}
-
-static bool DecodeErrPair(const flutter::CustomEncodableValue& err,
-                          std::string* code,
-                          std::string* msg) {
-  try {
-    const auto& pair =
-        std::any_cast<const std::pair<std::string, std::string>&>(
-            static_cast<const std::any&>(err));
-    *code = pair.first;
-    *msg = pair.second;
-    return true;
-  } catch (const std::bad_any_cast&) {
-    *code = "error_interno";
-    *msg = "No se pudo decodificar el error nativo.";
-    return false;
-  }
-}
-
 // ------------------------------------------------------------------
 //  flushDns
 // ------------------------------------------------------------------

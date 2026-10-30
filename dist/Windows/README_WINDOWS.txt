@@ -4,11 +4,17 @@
 
 INSTALACIÓN EN 1 CLIC:
 
-1. Haz doble clic en "MedLinkConnect-Setup.exe" (si está incluido) o en
-   "instalar_medlink_connect.bat".
-2. El instalador copia la aplicación a %LOCALAPPDATA%\MedLinkConnect y crea
-   accesos directos en el Escritorio y el Menú Inicio.
+1. Haz doble clic en "MedLinkConnect-Setup.exe".
+2. El instalador copia la aplicación a Archivos de programa y crea accesos
+   directos normales y de administrador en el Escritorio y el Menú Inicio.
 3. Abre "MedLink Connect" desde tu Escritorio o Menú Inicio.
+
+VERSIÓN PORTABLE:
+
+- Descomprime "MedLinkConnect_Windows_Portable.zip".
+- Ejecuta "instalar_medlink_connect.bat" para instalar sin privilegios de
+  sistema en %LOCALAPPDATA%\MedLinkConnect, o abre directamente
+  "bundle\medlink_connect.exe".
 
 MODO ADMINISTRADOR:
 
@@ -16,11 +22,6 @@ MODO ADMINISTRADOR:
   Úsalo para habilitar el túnel dividido y modificar rutas estáticas.
 - También puedes ejecutar "medlink_connect_admin.bat" dentro de la carpeta de
   instalación.
-
-VERSIÓN PORTABLE:
-
-- Descomprime "MedLinkConnect_Windows_Portable.zip" y ejecuta
-  "instalar_medlink_connect.bat" o directamente "bundle\medlink_connect.exe".
 
 NOTAS:
 

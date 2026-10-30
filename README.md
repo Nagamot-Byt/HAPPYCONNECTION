@@ -42,20 +42,30 @@ En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o W
 - **Permisos de Administrador** (obligatorio para `route add`/`New-NetRoute`)
 - Conexión a la red Wi-Fi del hospital
 
+## Descargas
+
+Los instaladores oficiales se publican en
+[GitHub Releases](https://github.com/Nagamot-Byt/HAPPYCONNECTION/releases/latest):
+
+- **Windows**: `MedLinkConnect-Setup.exe` (instalador 1 clic) o
+  `MedLinkConnect_Windows_Portable.zip`.
+- **Linux**: `MedLinkConnect_Linux_x64.run` (doble clic), `.deb` o `.tar.gz`.
+
 ## Instalación
 
 ### Linux
+
 ```bash
-flutter build linux --release
-./build/linux/x64/release/bundle/medlink_connect
+./scripts/build_linux.sh
+./dist/Linux/MedLinkConnect_Linux_x64.run   # instalador 1 clic
+# o: sudo apt install ./dist/Linux/medlink-connect_0.1.0_amd64.deb
 ```
 
-Los artefactos de `dist/Linux/` son scripts de referencia; no se incluye un `.deb` generado en este repositorio.
-
 ### Windows
-Ver `dist/Windows/README_WINDOWS.txt`. Generar bundle desde Windows con `flutter build windows --release` o usar Inno Setup (`windows/installer/inno_setup.iss`).
 
-Los instaladores/binarios oficiales se publican en **GitHub Releases**.
+Doble clic en `scripts\build_windows.bat` o descarga el instalador desde
+GitHub Releases. El instalador crea accesos directos normales y de
+administrador en el escritorio y el menú de inicio.
 
 ## Compilación en 1 clic
 
@@ -70,9 +80,18 @@ artefactos listos en `dist/`:
 | iOS (macOS) | `./scripts/build_ios.sh [--simulator\|--ipa]` | `.app.zip` o `.ipa` |
 | Mobile | `./scripts/build_mobile.sh` | Android + iOS si el host es macOS |
 
+El workflow `.github/workflows/build-desktop.yml` genera y publica los
+artefactos de Linux y Windows en cada tag `v*`.
+
 Auditoría repetible: `./scripts/audit.sh` (o `scripts\audit.bat`).
 
 Detalles y requisitos por plataforma en `dist/README_INSTALADORES.md`.
+
+## Documentación
+
+- `CHANGELOG.md` — historial de versiones.
+- `docs/audits/` — auditorías técnicas.
+- `dist/README_INSTALADORES.md` — empaquetado por plataforma.
 
 ## Desarrollo
 

@@ -3,6 +3,9 @@
 Los scripts de `scripts/` detectan Flutter, compilan y dejan artefactos listos
 para usar en `dist/`. Los binarios generados no se versionan.
 
+El workflow `.github/workflows/build-desktop.yml` compila Linux y Windows en CI
+y publica los artefactos en GitHub Releases al crear un tag `v*`.
+
 ## Auditoría rápida
 
 ```bash
@@ -86,4 +89,4 @@ Compila Android y, si el host es macOS, también iOS.
 - Linux: las rutas requieren `sudo`/polkit; la app lo solicita cuando hace falta.
 - macOS: el split tunnel requiere un helper privilegiado y no está disponible en
   esta compilación; la app continúa sobre las rutas del sistema.
-- La suite automatizada se ejecuta con `flutter test` (44 pruebas).
+- La suite automatizada se ejecuta con `flutter test` (48 pruebas).

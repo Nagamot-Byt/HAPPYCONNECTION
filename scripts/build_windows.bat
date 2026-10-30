@@ -44,6 +44,10 @@ if errorlevel 8 (
 )
 if exist "%DIST%\medlink_connect_admin.bat" (
   copy /Y "%DIST%\medlink_connect_admin.bat" "%DIST%\bundle\" >nul
+  copy /Y "%DIST%\medlink_connect_admin.bat" "%OUT%\" >nul
+)
+if exist "%DIST%\README_WINDOWS.txt" (
+  copy /Y "%DIST%\README_WINDOWS.txt" "%OUT%\" >nul
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -78,7 +82,7 @@ echo   - MedLinkConnect_Windows_Portable.zip
 echo   - MedLinkConnect-Setup.exe (si Inno Setup esta disponible)
 echo ========================================================
 popd >nul
-pause
+if /I not "%CI%"=="true" pause
 exit /b 0
 
 :find_flutter
@@ -105,5 +109,5 @@ echo ========================================================
 echo   La compilacion fallo. Revisa el mensaje anterior.
 echo ========================================================
 popd >nul
-pause
+if /I not "%CI%"=="true" pause
 exit /b 1

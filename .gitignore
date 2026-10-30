@@ -42,7 +42,6 @@ dist/**/*.zip
 # Mantener solo scripts/guías de distribución
 !dist/**/README*.txt
 !dist/**/instalar*.*
-!dist/**/build_installer*.*
 !dist/**/crear_dmg*.*
 !dist/**/empacar*.*
 !dist/**/LEEME*.txt

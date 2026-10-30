@@ -110,6 +110,20 @@ void main() {
           throwsArgumentError);
     });
 
+    test('enforces the stricter Android interface charset', () {
+      expect(InputSanitizer.sanitizeInterfaceName('wlan0', android: true),
+          'wlan0');
+      expect(
+          () => InputSanitizer.sanitizeInterfaceName('Wi-Fi 2.4 GHz',
+              android: true),
+          throwsArgumentError);
+      expect(
+          () => InputSanitizer.sanitizeInterfaceName(
+              'vEthernet (Default Switch)',
+              android: true),
+          throwsArgumentError);
+    });
+
     test('accepts SSIDs with punctuation and accents', () {
       expect(InputSanitizer.sanitizeSsid('HUV & Visitantes (5G)'),
           'HUV & Visitantes (5G)');

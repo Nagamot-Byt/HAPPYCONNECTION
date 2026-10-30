@@ -45,7 +45,7 @@ fileprivate class NetworkDiagnosticsPlugin {
   static func register(with vc: FlutterViewController) {
     let channel = FlutterMethodChannel(
       name: "com.medlinkconnect/network_diagnostics",
-      binaryMessenger: vc.engine!.binaryMessenger
+      binaryMessenger: vc.binaryMessenger
     )
     channel.setMethodCallHandler { call, result in
       switch call.method {
@@ -171,7 +171,7 @@ fileprivate class RouteManagerPlugin {
   static func register(with vc: FlutterViewController) {
     let channel = FlutterMethodChannel(
       name: "com.medlinkconnect/route_manager",
-      binaryMessenger: vc.engine!.binaryMessenger
+      binaryMessenger: vc.binaryMessenger
     )
     channel.setMethodCallHandler { call, result in
       // iOS sandbox no permite modificar tabla de rutas de bajo nivel.
@@ -280,7 +280,7 @@ fileprivate class RdpLauncherPlugin {
   static func register(with vc: FlutterViewController) {
     let channel = FlutterMethodChannel(
       name: "com.medlinkconnect/rdp_launcher",
-      binaryMessenger: vc.engine!.binaryMessenger
+      binaryMessenger: vc.binaryMessenger
     )
     channel.setMethodCallHandler { call, result in
       switch call.method {

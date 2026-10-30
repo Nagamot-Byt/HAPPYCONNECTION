@@ -1,3 +1,5 @@
+import 'dart:io';
+
 /// Centralized input validation for values that flow to native platform APIs.
 /// Host/CIDR values still pass through shell-based helpers on some platforms,
 /// so they keep a strict allow-list; interface and SSID names only reject
@@ -13,6 +15,9 @@ abstract final class InputSanitizer {
 
   // Control characters are never valid in names sent to native APIs.
   static final _controlChars = RegExp(r'[\x00-\x1F\x7F]');
+
+  // Android and macOS native validators only accept this subset.
+  static final _strictInterfacePattern = RegExp(r'^[A-Za-z0-9_.:-]+$');
 
   // Dangerous shell metacharacters (hostnames still flow to OS commands).
   static final _shellMetaChars = RegExp(r'[;&|`$(){}\[\]<>!\\\n\r]');
@@ -89,10 +94,11 @@ abstract final class InputSanitizer {
 
   /// Validates and returns a sanitized network interface name.
   ///
-  /// Interface names are passed to native APIs (not to a shell), so names such
-  /// as `vEthernet (Default Switch)` or `Wi-Fi 2.4` are valid.
+  /// Windows interface aliases may contain spaces or parentheses, such as
+  /// `vEthernet (Default Switch)`. Android and macOS only accept the stricter
+  /// `[A-Za-z0-9_.:-]` subset, so [android] can be forced in tests or callers.
   static String sanitizeInterfaceName(String input,
-      {String fieldName = 'Interfaz'}) {
+      {String fieldName = 'Interfaz', bool? android}) {
     final trimmed = input.trim();
     if (trimmed.isEmpty) {
       throw ArgumentError.value(
@@ -105,6 +111,14 @@ abstract final class InputSanitizer {
     if (trimmed.length > 128) {
       throw ArgumentError.value(
           trimmed, fieldName, 'El nombre de interfaz es demasiado largo.');
+    }
+    if ((android ?? (Platform.isAndroid || Platform.isMacOS)) &&
+        !_strictInterfacePattern.hasMatch(trimmed)) {
+      throw ArgumentError.value(
+          trimmed,
+          fieldName,
+          'En Android y macOS solo se permiten letras, números, punto, '
+          'guion, guion bajo y dos puntos.');
     }
     return trimmed;
   }

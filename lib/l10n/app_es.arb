@@ -29,6 +29,14 @@
   "statusConnected": "Conexión establecida exitosamente",
   "statusError": "Error de conexión",
   "statusDisconnected": "Túnel desconectado",
+  "semanticsConnectionStatus": "Estado de conexión: {status}",
+  "@semanticsConnectionStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
   "guidanceReadyTitle": "Listo para conectar",
   "guidanceReadyBullet1": "1. Selecciona la red Wi-Fi o detecta la actual.",
   "guidanceReadyBullet2": "2. Opcional: Elige un servidor o deja la selección automática.",
@@ -413,6 +421,7 @@
     }
   },
   "logDiagnosticsStart": "Iniciando diagnósticos de red…",
+  "logDiagnosticsTargetMissing": "No hay host RDP ni gateway configurado; se omite la prueba de ping.",
   "logDnsCacheError": "No se pudo limpiar la caché DNS: {error}",
   "@logDnsCacheError": {
     "placeholders": {

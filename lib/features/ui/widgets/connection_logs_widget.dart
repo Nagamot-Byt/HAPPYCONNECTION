@@ -10,7 +10,7 @@ class ConnectionLogsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<HomeController>();
-    final logs = controller.logs;
+    final logs = controller.logEntries;
     final l10n = AppLocalizations.of(context)!;
 
     return GlassContainer(
@@ -56,17 +56,23 @@ class ConnectionLogsWidget extends StatelessWidget {
                       padding: const EdgeInsets.all(8),
                       itemCount: logs.length,
                       itemBuilder: (context, index) {
-                        final line = logs[logs.length - 1 - index];
-                        final isErr = line.contains('❌');
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2.0),
-                          child: Text(
-                            line,
-                            style: TextStyle(
-                              color:
-                                  isErr ? Colors.redAccent : Colors.greenAccent,
-                              fontFamily: 'monospace',
-                              fontSize: 12,
+                        final entry = logs[logs.length - 1 - index];
+                        return Semantics(
+                          label: entry.formatted,
+                          child: ExcludeSemantics(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 2.0),
+                              child: Text(
+                                entry.formatted,
+                                style: TextStyle(
+                                  color: entry.isError
+                                      ? Colors.redAccent
+                                      : Colors.greenAccent,
+                                  fontFamily: 'monospace',
+                                  fontSize: 12,
+                                ),
+                              ),
                             ),
                           ),
                         );

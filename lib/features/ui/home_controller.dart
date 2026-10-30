@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:medlink_connect/core/connection_workflow_service.dart';
+import 'package:medlink_connect/core/exceptions.dart';
 import 'package:medlink_connect/core/network_diagnostics.dart';
 import 'package:medlink_connect/core/rdp_launcher.dart';
 import 'package:medlink_connect/core/route_manager.dart';
@@ -32,6 +34,23 @@ class ServerPreset {
   });
 
   bool get isConfigured => host.isNotEmpty && host != 'pendiente';
+}
+
+class ConnectionLogEntry {
+  final DateTime timestamp;
+  final String message;
+  final bool isError;
+
+  const ConnectionLogEntry({
+    required this.timestamp,
+    required this.message,
+    required this.isError,
+  });
+
+  String get time =>
+      timestamp.toIso8601String().split('T').last.substring(0, 12);
+
+  String get formatted => '[$time] $message';
 }
 
 class HomeController extends ChangeNotifier {
@@ -66,8 +85,10 @@ class HomeController extends ChangeNotifier {
   bool get splitTunnelActive => _splitTunnelActive;
 
   static const int _maxLogEntries = 500;
-  final List<String> _logs = [];
-  List<String> get logs => List.unmodifiable(_logs);
+  final List<ConnectionLogEntry> _logs = [];
+  List<ConnectionLogEntry> get logEntries => List.unmodifiable(_logs);
+  List<String> get logs =>
+      List.unmodifiable(_logs.map((entry) => entry.formatted));
 
   String? _guidanceTitle;
   String? get guidanceTitle => _guidanceTitle;
@@ -136,10 +157,11 @@ class HomeController extends ChangeNotifier {
   String get manualWifiOption => _kManualWifiOption;
 
   void log(String message, {bool isError = false}) {
-    final time =
-        DateTime.now().toIso8601String().split('T').last.substring(0, 12);
-    final prefix = isError ? '❌ ' : '✅ ';
-    _logs.add('[$time] $prefix$message');
+    _logs.add(ConnectionLogEntry(
+      timestamp: DateTime.now(),
+      message: message,
+      isError: isError,
+    ));
     if (_logs.length > _maxLogEntries) {
       _logs.removeRange(0, _logs.length - _maxLogEntries);
     }
@@ -177,68 +199,91 @@ class HomeController extends ChangeNotifier {
     );
   }
 
+  MedLinkErrorType _classifyError(Object error) {
+    if (error is MedLinkException) return error.type;
+    if (error is ArgumentError) return MedLinkErrorType.validation;
+    if (error is PlatformException) {
+      final code = error.code.toLowerCase();
+      if (code.contains('permiso') ||
+          code.contains('privilege') ||
+          code.contains('access_denied')) {
+        return MedLinkErrorType.permission;
+      }
+      if (code.startsWith('wifi')) return MedLinkErrorType.wifi;
+      if (code.startsWith('rdp')) return MedLinkErrorType.rdp;
+      if (code.startsWith('route') || code.startsWith('arp')) {
+        return MedLinkErrorType.route;
+      }
+      if (code.startsWith('flushdns') || code.startsWith('network')) {
+        return MedLinkErrorType.network;
+      }
+    }
+    return MedLinkErrorType.unknown;
+  }
+
   void setErrorGuidance(Object error) {
-    final eStr = error.toString().toLowerCase();
-    if (eStr.contains('permiso') ||
-        eStr.contains('administrador') ||
-        eStr.contains('elevado')) {
-      setGuidance(
-        l10n.guidanceAdminErrorTitle,
-        bullets: [
-          l10n.guidanceAdminErrorBullet1,
-          l10n.guidanceAdminErrorBullet2,
-          l10n.guidanceAdminErrorBullet3,
-        ],
-        isError: true,
-      );
-    } else if (eStr.contains('wi-fi') ||
-        eStr.contains('wifi') ||
-        eStr.contains('wlan')) {
-      setGuidance(
-        l10n.guidanceWifiErrorTitle,
-        bullets: [
-          l10n.guidanceWifiErrorBullet1,
-          l10n.guidanceWifiErrorBullet3,
-          l10n.guidanceWifiErrorBullet2,
-        ],
-        isError: true,
-      );
-    } else if (eStr.contains('ruta') ||
-        eStr.contains('route') ||
-        eStr.contains('gateway') ||
-        eStr.contains('interfaz')) {
-      setGuidance(
-        l10n.guidanceRouteErrorTitle,
-        bullets: [
-          l10n.guidanceRouteErrorBullet1,
-          l10n.guidanceRouteErrorBullet2,
-          l10n.guidanceRouteErrorBullet3,
-          l10n.guidanceRouteErrorBullet4,
-        ],
-        isError: true,
-      );
-    } else if (eStr.contains('rdp') ||
-        eStr.contains('mstsc') ||
-        eStr.contains('3389')) {
-      setGuidance(
-        l10n.guidanceRdpErrorTitle,
-        bullets: [
-          l10n.guidanceRdpErrorBullet1,
-          l10n.guidanceRdpErrorBullet2,
-          l10n.guidanceRdpErrorBullet3,
-        ],
-        isError: true,
-      );
-    } else {
-      setGuidance(
-        l10n.guidanceGenericErrorTitle,
-        bullets: [
-          l10n.guidanceGenericErrorBullet1,
-          l10n.guidanceGenericErrorBullet2,
-          l10n.guidanceGenericErrorBullet3,
-        ],
-        isError: true,
-      );
+    setErrorGuidanceType(_classifyError(error));
+  }
+
+  void setErrorGuidanceType(MedLinkErrorType type) {
+    switch (type) {
+      case MedLinkErrorType.permission:
+        setGuidance(
+          l10n.guidanceAdminErrorTitle,
+          bullets: [
+            l10n.guidanceAdminErrorBullet1,
+            l10n.guidanceAdminErrorBullet2,
+            l10n.guidanceAdminErrorBullet3,
+          ],
+          isError: true,
+        );
+        break;
+      case MedLinkErrorType.wifi:
+        setGuidance(
+          l10n.guidanceWifiErrorTitle,
+          bullets: [
+            l10n.guidanceWifiErrorBullet1,
+            l10n.guidanceWifiErrorBullet3,
+            l10n.guidanceWifiErrorBullet2,
+          ],
+          isError: true,
+        );
+        break;
+      case MedLinkErrorType.route:
+        setGuidance(
+          l10n.guidanceRouteErrorTitle,
+          bullets: [
+            l10n.guidanceRouteErrorBullet1,
+            l10n.guidanceRouteErrorBullet2,
+            l10n.guidanceRouteErrorBullet3,
+            l10n.guidanceRouteErrorBullet4,
+          ],
+          isError: true,
+        );
+        break;
+      case MedLinkErrorType.rdp:
+        setGuidance(
+          l10n.guidanceRdpErrorTitle,
+          bullets: [
+            l10n.guidanceRdpErrorBullet1,
+            l10n.guidanceRdpErrorBullet2,
+            l10n.guidanceRdpErrorBullet3,
+          ],
+          isError: true,
+        );
+        break;
+      case MedLinkErrorType.network:
+      case MedLinkErrorType.validation:
+      case MedLinkErrorType.unknown:
+        setGuidance(
+          l10n.guidanceGenericErrorTitle,
+          bullets: [
+            l10n.guidanceGenericErrorBullet1,
+            l10n.guidanceGenericErrorBullet2,
+            l10n.guidanceGenericErrorBullet3,
+          ],
+          isError: true,
+        );
     }
   }
 
@@ -739,6 +784,14 @@ class HomeController extends ChangeNotifier {
     return best;
   }
 
+  String? _diagnosticTarget() {
+    final rdpHost = rdpHostCtrl.text.trim();
+    if (rdpHost.isNotEmpty) return rdpHost;
+    final gateway = gatewayCtrl.text.trim();
+    if (gateway.isNotEmpty) return gateway;
+    return null;
+  }
+
   Future<void> runDiagnostics() async {
     if (_busy) return;
     clearGuidance();
@@ -761,15 +814,28 @@ class HomeController extends ChangeNotifier {
       } catch (e) {
         log(l10n.logArpCacheError('$e'), isError: true);
       }
-      try {
-        final ping = await networkDiagnostics.ping('8.8.8.8');
-        if (ping != null) {
-          log(l10n.logPingResult('8.8.8.8', ping));
-        } else {
-          log(l10n.logPingUnreachable('8.8.8.8'), isError: true);
+      final target = _diagnosticTarget();
+      if (target == null) {
+        log(l10n.logDiagnosticsTargetMissing, isError: true);
+      } else {
+        try {
+          final ping = await networkDiagnostics.ping(target);
+          if (ping != null) {
+            log(l10n.logPingResult(target, ping));
+          } else if (networkDiagnostics.lastProbeError != null) {
+            log(
+              l10n.logPingFailed(
+                target,
+                networkDiagnostics.lastProbeError!,
+              ),
+              isError: true,
+            );
+          } else {
+            log(l10n.logPingUnreachable(target), isError: true);
+          }
+        } catch (e) {
+          log(l10n.logPingFailed(target, '$e'), isError: true);
         }
-      } catch (e) {
-        log(l10n.logPingFailed('8.8.8.8', '$e'), isError: true);
       }
       log(l10n.logDiagnosticsDone);
       setGuidance(
@@ -878,6 +944,14 @@ class HomeController extends ChangeNotifier {
         final ping = await networkDiagnostics.ping(resolvedHost);
         if (ping != null) {
           log(l10n.logIcmpResult(resolvedHost, ping));
+        } else if (networkDiagnostics.lastProbeError != null) {
+          log(
+            l10n.logPingFailed(
+              resolvedHost,
+              networkDiagnostics.lastProbeError!,
+            ),
+            isError: true,
+          );
         } else {
           log(
             l10n.logIcmpUnreachable(resolvedHost),
@@ -898,6 +972,13 @@ class HomeController extends ChangeNotifier {
             ),
           );
         } else {
+          final probeError = networkDiagnostics.lastProbeError;
+          if (probeError != null) {
+            log(
+              l10n.logPingFailed(resolvedHost, probeError),
+              isError: true,
+            );
+          }
           log(
             l10n.logTcpFailed(resolvedPort, resolvedHost),
             isError: true,
@@ -1096,7 +1177,7 @@ class HomeController extends ChangeNotifier {
             ],
           );
         } else if (state.isFinished && state.isError) {
-          setErrorGuidance(state.logMessage);
+          setErrorGuidanceType(state.errorType ?? MedLinkErrorType.unknown);
         }
         notifyListeners();
       }

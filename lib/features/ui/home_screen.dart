@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:medlink_connect/core/app_theme.dart';
 import 'package:medlink_connect/features/ui/home_controller.dart';
 import 'package:medlink_connect/features/ui/widgets/connection_logs_widget.dart';
 import 'package:medlink_connect/features/ui/widgets/network_diagnostics_view.dart';
@@ -66,17 +67,8 @@ class _HomeScreenContent extends StatelessWidget {
     };
 
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F172A),
-            Color(0xFF003049),
-            Color(0xFF1565C0),
-            Color(0xFF00897B),
-          ],
-        ),
+      decoration: BoxDecoration(
+        gradient: AppTheme.backgroundGradient(Theme.of(context).brightness),
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -170,31 +162,44 @@ class _HomeScreenContent extends StatelessWidget {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 300),
-                                    child: Text(
-                                      stepText,
-                                      key: ValueKey(stepText),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            color: stepColor,
-                                          ),
-                                    ),
+                              child: Semantics(
+                                container: true,
+                                liveRegion: true,
+                                label: controller.currentWifiSsid.isEmpty
+                                    ? l10n.semanticsConnectionStatus(stepText)
+                                    : '${l10n.semanticsConnectionStatus(stepText)}. '
+                                        '${l10n.currentWifi(controller.currentWifiSsid)}',
+                                child: ExcludeSemantics(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      AnimatedSwitcher(
+                                        duration:
+                                            const Duration(milliseconds: 300),
+                                        child: Text(
+                                          stepText,
+                                          key: ValueKey(stepText),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                                color: stepColor,
+                                              ),
+                                        ),
+                                      ),
+                                      if (controller.currentWifiSsid.isNotEmpty)
+                                        Text(
+                                          l10n.currentWifi(
+                                              controller.currentWifiSsid),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                    ],
                                   ),
-                                  if (controller.currentWifiSsid.isNotEmpty)
-                                    Text(
-                                      l10n.currentWifi(
-                                          controller.currentWifiSsid),
-                                      style:
-                                          Theme.of(context).textTheme.bodySmall,
-                                    ),
-                                ],
+                                ),
                               ),
                             ),
                           ],

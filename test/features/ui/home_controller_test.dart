@@ -5,6 +5,7 @@ import 'package:medlink_connect/features/ui/home_controller.dart';
 import 'package:medlink_connect/core/network_diagnostics.dart';
 import 'package:medlink_connect/core/rdp_launcher.dart';
 import 'package:medlink_connect/core/connection_workflow_service.dart';
+import 'package:medlink_connect/core/exceptions.dart';
 import 'package:medlink_connect/core/route_manager.dart';
 import 'package:medlink_connect/core/wifi_manager.dart';
 import 'package:medlink_connect/core/settings_storage.dart';
@@ -70,22 +71,88 @@ void main() {
       expect(controller.busy, isFalse);
     });
 
-    test(
-        'runDiagnostics should use networkDiagnostics directly since it is not fully extracted',
-        () async {
+    test('runDiagnostics pings the configured hospital gateway', () async {
+      controller.gatewayCtrl.text = '192.168.1.1';
       when(() => mockNetworkDiagnostics.flushDns())
           .thenAnswer((_) async => 'DNS Flushed');
       when(() => mockNetworkDiagnostics.clearNetworkCaches())
           .thenAnswer((_) async => 'Caches Cleared');
-      when(() => mockNetworkDiagnostics.ping('8.8.8.8'))
+      when(() => mockNetworkDiagnostics.ping('192.168.1.1'))
           .thenAnswer((_) async => 20);
 
       await controller.runDiagnostics();
 
       expect(controller.logs.isNotEmpty, isTrue);
       expect(controller.logs.any((l) => l.contains('DNS Flushed')), isTrue);
-      expect(controller.logs.any((l) => l.contains('Ping a 8.8.8.8: 20ms')),
+      expect(controller.logs.any((l) => l.contains('Ping a 192.168.1.1: 20ms')),
           isTrue);
+    });
+
+    test('runDiagnostics prefers the RDP host and skips when no target exists',
+        () async {
+      controller.rdpHostCtrl.text = '10.20.30.40';
+      when(() => mockNetworkDiagnostics.flushDns())
+          .thenAnswer((_) async => 'DNS Flushed');
+      when(() => mockNetworkDiagnostics.clearNetworkCaches())
+          .thenAnswer((_) async => 'Caches Cleared');
+      when(() => mockNetworkDiagnostics.ping('10.20.30.40'))
+          .thenAnswer((_) async => 8);
+
+      await controller.runDiagnostics();
+      expect(
+          controller.logs.any((l) => l.contains('10.20.30.40: 8ms')), isTrue);
+
+      controller.clearLogs();
+      controller.rdpHostCtrl.text = '';
+      await controller.runDiagnostics();
+      expect(
+          controller.logs
+              .any((l) => l.contains('No hay host RDP ni gateway configurado')),
+          isTrue);
+    });
+
+    test('runDiagnostics surfaces the probe failure cause', () async {
+      controller.gatewayCtrl.text = '192.168.1.1';
+      when(() => mockNetworkDiagnostics.flushDns())
+          .thenAnswer((_) async => 'DNS Flushed');
+      when(() => mockNetworkDiagnostics.clearNetworkCaches())
+          .thenAnswer((_) async => 'Caches Cleared');
+      when(() => mockNetworkDiagnostics.ping('192.168.1.1'))
+          .thenAnswer((_) async => null);
+      when(() => mockNetworkDiagnostics.lastProbeError)
+          .thenReturn('inaccesible: sin ruta');
+
+      await controller.runDiagnostics();
+
+      expect(controller.logs.any((l) => l.contains('inaccesible: sin ruta')),
+          isTrue);
+    });
+
+    test('typed errors select guidance without reading message text', () {
+      controller.setErrorGuidance(
+          const PrivilegeRequiredException('permiso requerido'));
+      expect(controller.guidanceTitle, 'Faltan permisos de Administrador');
+
+      controller.setErrorGuidance(
+          const WifiConnectionException('no se pudo asociar'));
+      expect(controller.guidanceTitle, 'Problema con la red Wi-Fi');
+
+      controller
+          .setErrorGuidance(const RouteConfigurationException('fallo de ruta'));
+      expect(controller.guidanceTitle, 'Problema con rutas/gateway');
+
+      controller.setErrorGuidance(const RdpTimeoutException('sin respuesta'));
+      expect(controller.guidanceTitle, 'Problema con RDP/puerto 3389');
+    });
+
+    test('log entries keep error level without emoji', () {
+      controller.log('ok', isError: false);
+      controller.log('fallo', isError: true);
+
+      expect(controller.logEntries.last.isError, isTrue);
+      expect(controller.logs.last.contains('fallo'), isTrue);
+      expect(controller.logs.last.contains('❌'), isFalse);
+      expect(controller.logs.first.contains('✅'), isFalse);
     });
 
     test('applyServerPreset should update RDP fields', () {

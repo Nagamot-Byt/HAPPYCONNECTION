@@ -126,4 +126,57 @@ void main() {
     expect(res, equals('Split tunnel enabled'));
     expect(log.first.method, equals('enableSplitTunnel'));
   });
+
+  test('addRoute maps permission errors to a typed exception', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('com.medlinkconnect/route_manager'),
+      (MethodCall methodCall) async {
+        throw PlatformException(
+          code: 'acceso_denegado',
+          message: 'requiere administrador',
+        );
+      },
+    );
+
+    await expectLater(
+      routeManager.addRoute(
+        destinationCidr: '10.0.0.0/8',
+        gateway: '192.168.1.1',
+        interfaceName: 'Wi-Fi',
+      ),
+      throwsA(
+        predicate(
+          (error) =>
+              error is MedLinkException &&
+              error.type == MedLinkErrorType.permission,
+        ),
+      ),
+    );
+  });
+
+  test('addRoute keeps non-permission errors as route failures', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('com.medlinkconnect/route_manager'),
+      (MethodCall methodCall) async {
+        throw PlatformException(code: 'ruta_invalida', message: 'sin gateway');
+      },
+    );
+
+    await expectLater(
+      routeManager.addRoute(
+        destinationCidr: '10.0.0.0/8',
+        gateway: '192.168.1.1',
+        interfaceName: 'Wi-Fi',
+      ),
+      throwsA(
+        predicate(
+          (error) =>
+              error is RouteConfigurationException &&
+              error.type == MedLinkErrorType.route,
+        ),
+      ),
+    );
+  });
 }

@@ -17,12 +17,14 @@ class WorkflowState {
   final String logMessage;
   final bool isError;
   final bool isFinished;
+  final MedLinkErrorType? errorType;
 
   const WorkflowState({
     required this.step,
     required this.logMessage,
     this.isError = false,
     this.isFinished = false,
+    this.errorType,
   });
 }
 
@@ -64,7 +66,7 @@ class ConnectionWorkflowService {
 
     yield const WorkflowState(
       step: ConnectionStep.diagnostics,
-      logMessage: '🚀 Iniciando flujo completo de conexión…',
+      logMessage: 'Iniciando flujo completo de conexión…',
     );
 
     try {
@@ -309,8 +311,8 @@ class ConnectionWorkflowService {
         }
       }
 
-      final sanitizedHost =
-          InputSanitizer.sanitizeHostname(effectiveHost, fieldName: 'Servidor RDP');
+      final sanitizedHost = InputSanitizer.sanitizeHostname(effectiveHost,
+          fieldName: 'Servidor RDP');
       final sanitizedPort = InputSanitizer.sanitizePort(
         effectivePort.toString(),
         fieldName: 'Puerto RDP',
@@ -353,10 +355,12 @@ class ConnectionWorkflowService {
             step: ConnectionStep.preLaunch,
             logMessage: 'Host RDP $sanitizedHost responde en ${hostPing}ms.');
       } else {
-        yield const WorkflowState(
+        final probeError = networkDiagnostics.lastProbeError;
+        yield WorkflowState(
           step: ConnectionStep.preLaunch,
           logMessage:
-              'El host RDP no respondió a ICMP. Si el servidor bloquea ping, se intentará abrir RDP de todos modos.',
+              'El host RDP no respondió a ICMP. Si el servidor bloquea ping, se intentará abrir RDP de todos modos.'
+              '${probeError == null ? '' : ' Causa: $probeError.'}',
           isError: true,
         );
       }
@@ -364,8 +368,10 @@ class ConnectionWorkflowService {
       final tcpConnectTime =
           await networkDiagnostics.checkTcpPort(sanitizedHost, sanitizedPort);
       if (tcpConnectTime == null) {
+        final probeError = networkDiagnostics.lastProbeError;
         throw RdpTimeoutException(
-          'No se pudo abrir el puerto TCP $sanitizedPort en $sanitizedHost. Revisa rutas, firewall o disponibilidad del servidor RDP.',
+          'No se pudo abrir el puerto TCP $sanitizedPort en $sanitizedHost. Revisa rutas, firewall o disponibilidad del servidor RDP.'
+          '${probeError == null ? '' : ' Causa: $probeError.'}',
         );
       }
       yield WorkflowState(
@@ -438,9 +444,10 @@ class ConnectionWorkflowService {
       }
       yield WorkflowState(
           step: ConnectionStep.error,
-          logMessage: '❌ Error: $errorMsg',
+          logMessage: 'Error: $errorMsg',
           isError: true,
-          isFinished: true);
+          isFinished: true,
+          errorType: e is MedLinkException ? e.type : MedLinkErrorType.unknown);
     }
   }
 }

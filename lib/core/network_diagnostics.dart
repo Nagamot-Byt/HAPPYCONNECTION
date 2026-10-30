@@ -3,6 +3,12 @@
 /// Platform implementations use method channels
 /// (`com.medlinkconnect/network_diagnostics`) to invoke native code.
 abstract class NetworkDiagnostics {
+  /// Human-readable cause of the last [ping] or [checkTcpPort] probe failure.
+  ///
+  /// Returns `null` after a successful probe or when no probe has run yet.
+  /// Timeouts and platform errors are recorded so the UI can show the cause.
+  String? get lastProbeError;
+
   /// Flushes the DNS resolver cache.
   ///
   /// Returns a message describing the result. On Linux this runs

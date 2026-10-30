@@ -10,6 +10,23 @@ import 'package:medlink_connect/core/route_manager.dart';
 class DefaultRouteManager implements RouteManager {
   static const _channel = MethodChannel('com.medlinkconnect/route_manager');
 
+  bool _isPermissionError(PlatformException e) {
+    final code = e.code.toLowerCase();
+    final message = (e.message ?? '').toLowerCase();
+    return code.contains('permiso') ||
+        code.contains('privilege') ||
+        code.contains('access_denied') ||
+        message.contains('administrador') ||
+        message.contains('privilegio') ||
+        message.contains('sudo');
+  }
+
+  MedLinkException _routePlatformError(PlatformException e, String detail) {
+    return _isPermissionError(e)
+        ? PrivilegeRequiredException(detail)
+        : RouteConfigurationException(detail);
+  }
+
   bool _isValidIpv4(String ip) {
     try {
       InputSanitizer.sanitizeIpv4(ip);
@@ -50,8 +67,8 @@ class DefaultRouteManager implements RouteManager {
       });
       return result ?? 'Route added.';
     } on PlatformException catch (e) {
-      throw RouteConfigurationException(
-          'Error adding route (${e.code}): ${e.message}');
+      throw _routePlatformError(
+          e, 'Error adding route (${e.code}): ${e.message}');
     }
   }
 
@@ -83,8 +100,8 @@ class DefaultRouteManager implements RouteManager {
       });
       return result ?? 'Route removed.';
     } on PlatformException catch (e) {
-      throw RouteConfigurationException(
-          'Error removing route (${e.code}): ${e.message}');
+      throw _routePlatformError(
+          e, 'Error removing route (${e.code}): ${e.message}');
     }
   }
 
@@ -112,8 +129,8 @@ class DefaultRouteManager implements RouteManager {
       });
       return result ?? 'Split tunnel enabled.';
     } on PlatformException catch (e) {
-      throw RouteConfigurationException(
-          'Error enabling split tunnel (${e.code}): ${e.message}');
+      throw _routePlatformError(
+          e, 'Error enabling split tunnel (${e.code}): ${e.message}');
     }
   }
 
@@ -123,8 +140,8 @@ class DefaultRouteManager implements RouteManager {
       final result = await _channel.invokeMethod<String>('disableSplitTunnel');
       return result ?? 'Split tunnel disabled.';
     } on PlatformException catch (e) {
-      throw RouteConfigurationException(
-          'Error disabling split tunnel (${e.code}): ${e.message}');
+      throw _routePlatformError(
+          e, 'Error disabling split tunnel (${e.code}): ${e.message}');
     }
   }
 
@@ -134,8 +151,8 @@ class DefaultRouteManager implements RouteManager {
       final result = await _channel.invokeMethod<String>('getRoutes');
       return result ?? '';
     } on PlatformException catch (e) {
-      throw RouteConfigurationException(
-          'Error fetching routes (${e.code}): ${e.message}');
+      throw _routePlatformError(
+          e, 'Error fetching routes (${e.code}): ${e.message}');
     }
   }
 
@@ -155,7 +172,8 @@ class DefaultRouteManager implements RouteManager {
         ),
       );
     } on PlatformException catch (e) {
-      throw RouteConfigurationException(
+      throw _routePlatformError(
+        e,
         'Error fetching default route info (${e.code}): ${e.message}',
       );
     }
@@ -169,8 +187,8 @@ class DefaultRouteManager implements RouteManager {
       if (result == null) return [];
       return result.cast<String>();
     } on PlatformException catch (e) {
-      throw RouteConfigurationException(
-          'Error listing interfaces (${e.code}): ${e.message}');
+      throw _routePlatformError(
+          e, 'Error listing interfaces (${e.code}): ${e.message}');
     }
   }
 
@@ -203,8 +221,8 @@ class DefaultRouteManager implements RouteManager {
       }
       return missing;
     } on PlatformException catch (e) {
-      throw RouteConfigurationException(
-          'Error verifying routes (${e.code}): ${e.message}');
+      throw _routePlatformError(
+          e, 'Error verifying routes (${e.code}): ${e.message}');
     }
   }
 }

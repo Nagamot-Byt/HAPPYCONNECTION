@@ -89,4 +89,4 @@ Compila Android y, si el host es macOS, también iOS.
 - Linux: las rutas requieren `sudo`/polkit; la app lo solicita cuando hace falta.
 - macOS: el split tunnel requiere un helper privilegiado y no está disponible en
   esta compilación; la app continúa sobre las rutas del sistema.
-- La suite automatizada se ejecuta con `flutter test` (48 pruebas).
+- La suite automatizada se ejecuta con `flutter test` (60 pruebas).

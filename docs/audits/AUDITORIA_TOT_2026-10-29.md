@@ -173,29 +173,29 @@ Pregunta raíz: **¿Es seguro y confiable desplegar MedLink Connect en el hospit
 
 | ID | Severidad | Hallazgo | Evidencia | Estado |
 |---|---|---|---|---|
-| SEC-01 | Media | Sanitizador Dart de interfaz más permisivo que validadores nativos | `input_sanitizer.dart`, `MainActivity.kt`, `MainFlutterWindow.swift` | Abierto / mitigado |
+| SEC-01 | Media | Sanitizador Dart de interfaz más permisivo que validadores nativos | `input_sanitizer.dart`, `MainActivity.kt`, `MainFlutterWindow.swift` | **Corregido** (modo estricto Android) |
 | SEC-02 | Baja | `.rdp` temporal incluye usuario/dominio | `windows/runner/rdp_launcher_plugin.cc` | Mitigado: sin contraseña, borrado posterior |
-| SEC-03 | Baja | Windows conserva clave en perfil WLAN | `wifi_manager_plugin.cc` | Comportamiento del SO; documentar |
+| SEC-03 | Baja | Windows conserva clave en perfil WLAN | `wifi_manager_plugin.cc` | **Documentado** en README |
 | SEC-04 | Alta | macOS sin helper privilegiado para rutas | `macos/Runner/MainFlutterWindow.swift` | Abierto; split tunnel no disponible |
 | SEC-05 | Media | iOS sin NetworkExtension | `ios/Runner/AppDelegate.swift` | Abierto; limitación de plataforma |
-| SEC-06 | Media | Force-unwrap de `engine` en iOS | `ios/Runner/AppDelegate.swift` | Abierto |
+| SEC-06 | Media | Force-unwrap de `engine` en iOS | `ios/Runner/AppDelegate.swift` | **Corregido** |
 | FUN-01 | Alta | `splitTunnelActive` falso positivo al iniciar paso | `home_controller.dart` | **Corregido** |
 | FUN-02 | Media | Servidor autoseleccionado no persistido | `home_controller.dart` | **Corregido** |
 | FUN-03 | Media | Contraseña Wi-Fi retenida tras conexión only-Wi-Fi | `home_controller.dart` | **Corregido** |
 | FUN-04 | Baja | Puerto inválido silencioso | `home_controller.dart` | **Corregido** (fallback + log) |
-| FUN-05 | Media | Ping a 8.8.8.8 no representa conectividad hospitalaria | `home_controller.dart` | Abierto |
-| FUN-06 | Media | Diagnóstico oculta causa de fallo | `default_network_diagnostics.dart` | Abierto |
-| FUN-07 | Media | Clasificación de errores por texto/emoji | `home_controller.dart` | Abierto |
+| FUN-05 | Media | Ping a 8.8.8.8 no representa conectividad hospitalaria | `home_controller.dart` | **Corregido** (host RDP/gateway) |
+| FUN-06 | Media | Diagnóstico oculta causa de fallo | `default_network_diagnostics.dart` | **Corregido** (`lastProbeError`) |
+| FUN-07 | Media | Clasificación de errores por texto/emoji | `home_controller.dart` | **Corregido** (`MedLinkErrorType`) |
 | ARQ-01 | Media | `HomeController` monolítico (~1158 líneas) | `home_controller.dart` | Abierto |
-| ARQ-02 | Media | `mobile_rdp` desconectado y con proxy en memoria | `lib/mobile_rdp/` | Abierto; decidir eliminar o completar |
+| ARQ-02 | Media | `mobile_rdp` desconectado y con proxy en memoria | `lib/mobile_rdp/` | **Decidido**: PoC aislado, fuera del release |
 | UI-01 | Alta | i18n incompleta pese a ARB es/en | `home_screen.dart`, widgets, controlador | **Corregido** (2026-10-30) |
-| UI-02 | Media | Tema claro/oscuro no reflejado en fondo | `home_screen.dart`, `app_theme.dart` | Abierto |
-| UI-03 | Media | Sin semántica/accesibilidad sistemática | widgets UI | Abierto |
-| UI-04 | Baja | Logs usan emoji para nivel de error | `home_controller.dart`, `connection_logs_widget.dart` | Abierto |
+| UI-02 | Media | Tema claro/oscuro no reflejado en fondo | `home_screen.dart`, `app_theme.dart` | **Corregido** |
+| UI-03 | Media | Sin semántica/accesibilidad sistemática | widgets UI | **Corregido** (estado, pasos y logs) |
+| UI-04 | Baja | Logs usan emoji para nivel de error | `home_controller.dart`, `connection_logs_widget.dart` | **Corregido** (logs estructurados) |
 | BLD-01 | Alta | Piso Flutter/SDK incompatible con APIs usadas | `pubspec.yaml` | **Corregido** |
-| BLD-02 | Media | Windows build no corre en push/PR | `.github/workflows/windows_build.yml` | Abierto |
-| BLD-03 | Media | Apple CI encolado / validación inestable | run `40996941485` | Externo / abierto |
-| TEST-01 | Media | Cobertura 55.4%, módulos nativos/UI sin pruebas | `coverage/lcov.info` | Abierto |
+| BLD-02 | Media | Windows build no corre en push/PR | `.github/workflows/build-desktop.yml` | **Corregido** |
+| BLD-03 | Media | Apple CI encolado / validación inestable | run `40996941485` | **Mitigado**: workflow manual |
+| TEST-01 | Media | Cobertura 55.4%, módulos nativos/UI sin pruebas | `coverage/lcov.info` | **Parcial**: 60 pruebas y diagnóstico cubierto |
 | TEST-02 | Media | Sin pruebas de integración reales de red/RDP | `test/` | Abierto |
 
 ## 5. Plan de acción
@@ -252,4 +252,33 @@ Con las correcciones P0 aplicadas, el proyecto queda en mejor posición para una
 ```text
 flutter analyze lib test  → No issues found
 flutter test              → 48 tests passed
+```
+
+
+## 9. Actualización 2026-10-30 (P1)
+
+- **FUN-07 cerrado:** `MedLinkErrorType` clasifica permisos, Wi-Fi, rutas, RDP,
+  red, validación y errores desconocidos. La UI ya no inspecciona texto ni
+  emojis para elegir la guía.
+- **FUN-05 cerrado:** el diagnóstico básico usa el host RDP configurado o el
+  gateway; si no hay objetivo, lo informa y omite el ping.
+- **FUN-06 cerrado:** `NetworkDiagnostics.lastProbeError` conserva la causa
+  (timeout, error de plataforma o plugin ausente) y se muestra en el registro.
+- **UI-02/03/04 cerrados:** fondo claro/oscuro coherente con el tema, semántica
+  para estado/pasos/logs y entradas de log estructuradas sin emojis.
+- **SEC-01 corregido:** el sanitizador aplica el charset estricto de Android
+  (`[A-Za-z0-9_.:-]`) sin romper alias de Windows.
+- **SEC-06 corregido:** los canales iOS usan `vc.binaryMessenger` sin forzar el
+  unwrap del motor.
+- **SEC-03 documentado:** README explica que Windows conserva la clave en el
+  perfil WLAN del SO.
+- **ARQ-02 decidido:** `mobile_rdp`/FreeRDP queda como PoC aislado, no importado
+  y fuera de los instaladores de escritorio.
+- **BLD-02/BLD-03:** build de escritorio en push/PR y workflow Apple solo manual.
+- **TEST-01 parcial:** se añadieron pruebas de `DefaultNetworkDiagnostics`,
+  objetivos de diagnóstico, errores tipados y logs estructurados.
+
+```text
+flutter analyze lib test  → No issues found
+flutter test              → 60 tests passed
 ```

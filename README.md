@@ -36,6 +36,21 @@ MedLink Connect **NO** implementa un túnel VPN completo (WireGuard/OpenVPN). Ut
 
 En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o WPA3 debe existir un perfil previo en el sistema operativo.
 
+## Seguridad y limitaciones
+
+- Las credenciales RDP (`usuario` y `dominio`) se guardan cifradas con el
+  almacén seguro del sistema. La contraseña Wi-Fi nunca se persiste.
+- En Windows, la clave Wi-Fi se entrega a la API WLAN del sistema; Windows la
+  conserva en el perfil de red administrado por el SO y MedLink Connect no la
+  vuelve a leer.
+- El diagnóstico usa como objetivo el host RDP configurado o, si no existe, el
+  gateway de la red hospitalaria. No depende de `8.8.8.8` ni de Internet.
+- `lib/mobile_rdp/` y `native/freerdp/` son un PoC aislado que no se importa en
+  la aplicación y no forma parte de los instaladores de escritorio.
+- macOS requiere un helper privilegiado para rutas; iOS requiere
+  NetworkExtension. Sin ellos, el split tunnel no está soportado en esas
+  plataformas.
+
 ## Requisitos (Windows)
 
 - Windows con `mstsc.exe` disponible

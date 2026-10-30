@@ -213,6 +213,78 @@ void main() {
       verifyNever(() => mockRouteManager.disableSplitTunnel());
     });
 
+    test('split tunnel becomes active only after native enable callback',
+        () async {
+      controller.rdpHostCtrl.text = '192.168.1.100';
+      controller.subnetsCtrl.text = '10.0.0.0/8';
+      controller.gatewayCtrl.text = '192.168.1.1';
+      controller.ifaceCtrl.text = 'Wi-Fi';
+      controller.rdpPortCtrl.text = '3389';
+
+      when(() => mockSettingsStorage.setPendingSplitTunnelCleanup(
+            subnets: any(named: 'subnets'),
+            gateway: any(named: 'gateway'),
+            interfaceName: any(named: 'interfaceName'),
+          )).thenAnswer((_) async {});
+      when(() => mockWorkflowService.connect(
+            subnets: ['10.0.0.0/8'],
+            host: '192.168.1.100',
+            user: '',
+            domain: '',
+            selectedWifi: '',
+            gateway: '192.168.1.1',
+            iface: 'Wi-Fi',
+            resolvedPort: 3389,
+            rdpProfile: 'adaptive',
+            wifiPassword: '',
+            onSelectServer: any(named: 'onSelectServer'),
+            onSplitTunnelEnabled: any(named: 'onSplitTunnelEnabled'),
+            onSplitTunnelRolledBack: any(named: 'onSplitTunnelRolledBack'),
+            onSplitTunnelUnavailable: any(named: 'onSplitTunnelUnavailable'),
+          )).thenAnswer((invocation) {
+        final onEnabled = invocation.namedArguments[#onSplitTunnelEnabled]
+            as Future<void> Function(List<String>, String, String)?;
+        return () async* {
+          yield const WorkflowState(
+            step: ConnectionStep.splitTunnel,
+            logMessage: 'Preparando túnel',
+          );
+          expect(controller.splitTunnelActive, isFalse);
+          await onEnabled?.call(['10.0.0.0/8'], '192.168.1.1', 'Wi-Fi');
+          expect(controller.splitTunnelActive, isTrue);
+          yield const WorkflowState(
+            step: ConnectionStep.done,
+            logMessage: 'Conectado',
+            isFinished: true,
+          );
+        }();
+      });
+
+      await controller.connect();
+
+      expect(controller.splitTunnelActive, isTrue);
+    });
+
+    test('log keeps only the most recent entries', () {
+      for (var i = 0; i < 600; i++) {
+        controller.log('line $i');
+      }
+
+      expect(controller.logs.length, 500);
+      expect(controller.logs.first, contains('line 100'));
+      expect(controller.logs.last, contains('line 599'));
+    });
+
+    test('invalid RDP port falls back to 3389 and reports it', () {
+      controller.rdpPortCtrl.text = '70000';
+
+      expect(controller.parsePort(), 3389);
+      expect(
+        controller.logs.any((line) => line.contains('Puerto RDP inválido')),
+        isTrue,
+      );
+    });
+
     test('connect rejects empty subnets or host', () async {
       controller.rdpHostCtrl.text = '';
       await controller.connect();

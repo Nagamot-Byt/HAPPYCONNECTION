@@ -50,10 +50,11 @@ class ConnectionLogsWidget extends StatelessWidget {
                       ),
                     )
                   : ListView.builder(
+                      reverse: true,
                       padding: const EdgeInsets.all(8),
                       itemCount: logs.length,
                       itemBuilder: (context, index) {
-                        final line = logs[index];
+                        final line = logs[logs.length - 1 - index];
                         final isErr = line.contains('❌');
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 2.0),

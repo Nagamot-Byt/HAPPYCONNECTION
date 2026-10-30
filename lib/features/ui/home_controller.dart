@@ -62,6 +62,7 @@ class HomeController extends ChangeNotifier {
   bool _splitTunnelActive = false;
   bool get splitTunnelActive => _splitTunnelActive;
 
+  static const int _maxLogEntries = 500;
   final List<String> _logs = [];
   List<String> get logs => List.unmodifiable(_logs);
 
@@ -136,6 +137,9 @@ class HomeController extends ChangeNotifier {
         DateTime.now().toIso8601String().split('T').last.substring(0, 12);
     final prefix = isError ? '❌ ' : '✅ ';
     _logs.add('[$time] $prefix$message');
+    if (_logs.length > _maxLogEntries) {
+      _logs.removeRange(0, _logs.length - _maxLogEntries);
+    }
     notifyListeners();
   }
 
@@ -570,6 +574,7 @@ class HomeController extends ChangeNotifier {
       log('Error conectando Wi-Fi: $e', isError: true);
       setErrorGuidance(e);
     } finally {
+      wifiPasswordCtrl.clear();
       _busy = false;
       notifyListeners();
     }
@@ -687,8 +692,14 @@ class HomeController extends ChangeNotifier {
   }
 
   int parsePort() {
-    final v = int.tryParse(rdpPortCtrl.text.trim()) ?? 3389;
-    return (v <= 0 || v > 65535) ? 3389 : v;
+    final raw = rdpPortCtrl.text.trim();
+    if (raw.isEmpty) return 3389;
+    final v = int.tryParse(raw);
+    if (v == null || v <= 0 || v > 65535) {
+      log('Puerto RDP inválido ("$raw"). Se usará 3389.', isError: true);
+      return 3389;
+    }
+    return v;
   }
 
   Future<int?> measureTcpPortWithRetry(
@@ -1042,17 +1053,22 @@ class HomeController extends ChangeNotifier {
                 }
               }
             : null,
-        onSplitTunnelEnabled: (subnets, gateway, iface) =>
-            _persistSplitTunnelCleanup(
-          subnets: subnets,
-          gateway: gateway,
-          interfaceName: iface,
-        ),
+        onSplitTunnelEnabled: (subnets, gateway, iface) async {
+          _splitTunnelActive = true;
+          notifyListeners();
+          await _persistSplitTunnelCleanup(
+            subnets: subnets,
+            gateway: gateway,
+            interfaceName: iface,
+          );
+        },
         onSplitTunnelUnavailable: () async {
           _splitTunnelActive = false;
+          notifyListeners();
         },
         onSplitTunnelRolledBack: () async {
           _splitTunnelActive = false;
+          notifyListeners();
           try {
             await settings?.clearPendingSplitTunnelCleanup();
           } catch (_) {
@@ -1061,14 +1077,13 @@ class HomeController extends ChangeNotifier {
         },
       )) {
         _step = state.step;
-        if (state.step == ConnectionStep.splitTunnel) {
-          _splitTunnelActive = true;
-        } else if (state.step == ConnectionStep.error) {
+        if (state.step == ConnectionStep.error) {
           _splitTunnelActive = false;
         }
         log(state.logMessage, isError: state.isError);
 
         if (state.isFinished && !state.isError) {
+          await _saveSettingsSafely();
           setGuidance(
             'La conexión quedó iniciada',
             bullets: [

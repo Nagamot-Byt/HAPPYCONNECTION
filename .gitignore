@@ -16,6 +16,7 @@ flutter_*.png
 *.iml
 
 # Debug / local
+coverage/
 .dbg/
 *.log
 

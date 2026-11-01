@@ -89,4 +89,8 @@ Compila Android y, si el host es macOS, también iOS.
 - Linux: las rutas requieren `sudo`/polkit; la app lo solicita cuando hace falta.
 - macOS: el split tunnel requiere un helper privilegiado y no está disponible en
   esta compilación; la app continúa sobre las rutas del sistema.
-- La suite automatizada se ejecuta con `flutter test` (60 pruebas).
+- La suite automatizada se ejecuta con `flutter test` (75 pruebas).
+- Las pruebas de integración nativas se ejecutan con
+  `flutter test integration_test/app_integration_test.dart -d linux` (o la
+  plataforma correspondiente). Las pruebas reales de red son opt-in mediante
+  `--dart-define` y no forman parte del CI por defecto.

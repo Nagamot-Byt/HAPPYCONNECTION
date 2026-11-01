@@ -61,12 +61,13 @@ static FlMethodResponse* handle_flush_dns() {
     return FL_METHOD_RESPONSE(fl_method_success_response_new(
         fl_value_new_string(msg->str)));
   }
-  // Even if nscd fails, we tried — report result
   g_string_append(msg, "; nscd: ");
   g_string_append(msg, err ? err : "not available");
 
-  return FL_METHOD_RESPONSE(fl_method_success_response_new(
-      fl_value_new_string(msg->str)));
+  return FL_METHOD_RESPONSE(fl_method_error_response_new(
+      "error_comando",
+      msg->str,
+      nullptr));
 }
 
 /* ------------------------------------------------------------------ */

@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:medlink_connect/core/connection_workflow_service.dart';
 import 'package:medlink_connect/core/exceptions.dart';
+import 'package:medlink_connect/core/input_sanitizer.dart';
 import 'package:medlink_connect/core/network_diagnostics.dart';
 import 'package:medlink_connect/core/rdp_launcher.dart';
 import 'package:medlink_connect/core/route_manager.dart';
 import 'package:medlink_connect/core/settings_storage.dart';
 import 'package:medlink_connect/core/wifi_manager.dart';
+import 'package:medlink_connect/features/ui/error_guidance.dart';
+import 'package:medlink_connect/features/ui/home_models.dart';
+
+export 'package:medlink_connect/features/ui/home_models.dart'
+    show ConnectionLogEntry, ServerPreset;
 
 enum ConnectionStep {
   idle,
@@ -18,39 +23,6 @@ enum ConnectionStep {
   launchRdp,
   done,
   error,
-}
-
-class ServerPreset {
-  final String id;
-  final String label;
-  final String host;
-  final int port;
-
-  const ServerPreset({
-    required this.id,
-    required this.label,
-    required this.host,
-    required this.port,
-  });
-
-  bool get isConfigured => host.isNotEmpty && host != 'pendiente';
-}
-
-class ConnectionLogEntry {
-  final DateTime timestamp;
-  final String message;
-  final bool isError;
-
-  const ConnectionLogEntry({
-    required this.timestamp,
-    required this.message,
-    required this.isError,
-  });
-
-  String get time =>
-      timestamp.toIso8601String().split('T').last.substring(0, 12);
-
-  String get formatted => '[$time] $message';
 }
 
 class HomeController extends ChangeNotifier {
@@ -70,7 +42,15 @@ class HomeController extends ChangeNotifier {
     required this.rdpLauncher,
     required this.workflowService,
     required this.l10n,
-  });
+  }) : errorGuidance = ErrorGuidanceResolver(l10n) {
+    workflowService.configureLocalizations(l10n);
+  }
+
+  bool _disposed = false;
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -84,11 +64,9 @@ class HomeController extends ChangeNotifier {
   bool _splitTunnelActive = false;
   bool get splitTunnelActive => _splitTunnelActive;
 
-  static const int _maxLogEntries = 500;
-  final List<ConnectionLogEntry> _logs = [];
-  List<ConnectionLogEntry> get logEntries => List.unmodifiable(_logs);
-  List<String> get logs =>
-      List.unmodifiable(_logs.map((entry) => entry.formatted));
+  final ConnectionLogStore _logStore = ConnectionLogStore();
+  List<ConnectionLogEntry> get logEntries => _logStore.entries;
+  List<String> get logs => _logStore.formatted;
 
   String? _guidanceTitle;
   String? get guidanceTitle => _guidanceTitle;
@@ -113,28 +91,28 @@ class HomeController extends ChangeNotifier {
   String get rdpProfile => _rdpProfile;
   set rdpProfile(String value) {
     _rdpProfile = value;
-    notifyListeners();
+    _notify();
   }
 
   bool _preferMostStableServer = true;
   bool get preferMostStableServer => _preferMostStableServer;
   set preferMostStableServer(bool value) {
     _preferMostStableServer = value;
-    notifyListeners();
+    _notify();
   }
 
   String _selectedServerPresetId = 'manual';
   String get selectedServerPresetId => _selectedServerPresetId;
   set selectedServerPresetId(String value) {
     _selectedServerPresetId = value;
-    notifyListeners();
+    _notify();
   }
 
   List<ServerPreset> _serverPresets = [];
   List<ServerPreset> get serverPresets => List.unmodifiable(_serverPresets);
   set serverPresets(List<ServerPreset> value) {
     _serverPresets = List.from(value);
-    notifyListeners();
+    _notify();
   }
 
   List<String> _wifiNetworks = [];
@@ -147,7 +125,7 @@ class HomeController extends ChangeNotifier {
   String? get selectedWifiSsid => _selectedWifiSsid;
   set selectedWifiSsid(String? value) {
     _selectedWifiSsid = value;
-    notifyListeners();
+    _notify();
   }
 
   String _currentWifiSsid = '';
@@ -157,20 +135,13 @@ class HomeController extends ChangeNotifier {
   String get manualWifiOption => _kManualWifiOption;
 
   void log(String message, {bool isError = false}) {
-    _logs.add(ConnectionLogEntry(
-      timestamp: DateTime.now(),
-      message: message,
-      isError: isError,
-    ));
-    if (_logs.length > _maxLogEntries) {
-      _logs.removeRange(0, _logs.length - _maxLogEntries);
-    }
-    notifyListeners();
+    _logStore.add(message, isError: isError);
+    _notify();
   }
 
   void clearLogs() {
-    _logs.clear();
-    notifyListeners();
+    _logStore.clear();
+    _notify();
   }
 
   void setGuidance(String title,
@@ -178,14 +149,14 @@ class HomeController extends ChangeNotifier {
     _guidanceTitle = title;
     _guidanceBullets = bullets;
     _guidanceIsError = isError;
-    notifyListeners();
+    _notify();
   }
 
   void clearGuidance() {
     _guidanceTitle = null;
     _guidanceBullets = [];
     _guidanceIsError = false;
-    notifyListeners();
+    _notify();
   }
 
   void setReadyGuidance() {
@@ -199,96 +170,23 @@ class HomeController extends ChangeNotifier {
     );
   }
 
-  MedLinkErrorType _classifyError(Object error) {
-    if (error is MedLinkException) return error.type;
-    if (error is ArgumentError) return MedLinkErrorType.validation;
-    if (error is PlatformException) {
-      final code = error.code.toLowerCase();
-      if (code.contains('permiso') ||
-          code.contains('privilege') ||
-          code.contains('access_denied')) {
-        return MedLinkErrorType.permission;
-      }
-      if (code.startsWith('wifi')) return MedLinkErrorType.wifi;
-      if (code.startsWith('rdp')) return MedLinkErrorType.rdp;
-      if (code.startsWith('route') || code.startsWith('arp')) {
-        return MedLinkErrorType.route;
-      }
-      if (code.startsWith('flushdns') || code.startsWith('network')) {
-        return MedLinkErrorType.network;
-      }
-    }
-    return MedLinkErrorType.unknown;
-  }
+  final ErrorGuidanceResolver errorGuidance;
 
   void setErrorGuidance(Object error) {
-    setErrorGuidanceType(_classifyError(error));
+    setErrorGuidanceType(errorGuidance.classify(error));
   }
 
   void setErrorGuidanceType(MedLinkErrorType type) {
-    switch (type) {
-      case MedLinkErrorType.permission:
-        setGuidance(
-          l10n.guidanceAdminErrorTitle,
-          bullets: [
-            l10n.guidanceAdminErrorBullet1,
-            l10n.guidanceAdminErrorBullet2,
-            l10n.guidanceAdminErrorBullet3,
-          ],
-          isError: true,
-        );
-        break;
-      case MedLinkErrorType.wifi:
-        setGuidance(
-          l10n.guidanceWifiErrorTitle,
-          bullets: [
-            l10n.guidanceWifiErrorBullet1,
-            l10n.guidanceWifiErrorBullet3,
-            l10n.guidanceWifiErrorBullet2,
-          ],
-          isError: true,
-        );
-        break;
-      case MedLinkErrorType.route:
-        setGuidance(
-          l10n.guidanceRouteErrorTitle,
-          bullets: [
-            l10n.guidanceRouteErrorBullet1,
-            l10n.guidanceRouteErrorBullet2,
-            l10n.guidanceRouteErrorBullet3,
-            l10n.guidanceRouteErrorBullet4,
-          ],
-          isError: true,
-        );
-        break;
-      case MedLinkErrorType.rdp:
-        setGuidance(
-          l10n.guidanceRdpErrorTitle,
-          bullets: [
-            l10n.guidanceRdpErrorBullet1,
-            l10n.guidanceRdpErrorBullet2,
-            l10n.guidanceRdpErrorBullet3,
-          ],
-          isError: true,
-        );
-        break;
-      case MedLinkErrorType.network:
-      case MedLinkErrorType.validation:
-      case MedLinkErrorType.unknown:
-        setGuidance(
-          l10n.guidanceGenericErrorTitle,
-          bullets: [
-            l10n.guidanceGenericErrorBullet1,
-            l10n.guidanceGenericErrorBullet2,
-            l10n.guidanceGenericErrorBullet3,
-          ],
-          isError: true,
-        );
-    }
+    final guidance = errorGuidance.resolveType(type);
+    setGuidance(
+      guidance.title,
+      bullets: guidance.bullets,
+      isError: true,
+    );
   }
 
   Future<void> init() async {
-    _logs.clear();
+    _logStore.clear();
     log(l10n.logStartup);
     try {
       await _loadSettings();
@@ -301,7 +199,7 @@ class HomeController extends ChangeNotifier {
       log(l10n.logCleanupSettingsError('$e'), isError: true);
     }
     _loaded = true;
-    notifyListeners();
+    _notify();
     setReadyGuidance();
 
     // We can run these without awaiting init
@@ -323,11 +221,11 @@ class HomeController extends ChangeNotifier {
     );
   }
 
-  Future<void> _cleanupStaleSplitTunnel() async {
+  Future<bool> _cleanupStaleSplitTunnel() async {
     final s = settings;
-    if (s == null) return;
+    if (s == null) return true;
     final pending = s.pendingSplitTunnelCleanup;
-    if (pending == null) return;
+    if (pending == null) return true;
 
     log(l10n.logStaleTunnelFound);
     final failures = <String>[];
@@ -346,12 +244,13 @@ class HomeController extends ChangeNotifier {
       await s.clearPendingSplitTunnelCleanup();
       _splitTunnelActive = false;
       log(l10n.logStaleRoutesRemoved);
-    } else {
-      log(
-        l10n.logStaleRoutesFailed(failures.join(', ')),
-        isError: true,
-      );
+      return true;
     }
+    log(
+      l10n.logStaleRoutesFailed(failures.join(', ')),
+      isError: true,
+    );
+    return false;
   }
 
   Future<void> _loadSettings() async {
@@ -422,10 +321,7 @@ class HomeController extends ChangeNotifier {
     s.rdpProfile = rdpProfile;
     s.preferMostStableServer = preferMostStableServer;
 
-    final w = resolvedWifiSsid();
-    if (w.isNotEmpty) {
-      s.wifiSsid = w;
-    }
+    s.wifiSsid = resolvedWifiSsid();
     s.selectedServerPresetId = selectedServerPresetId;
     await s.save();
   }
@@ -449,18 +345,20 @@ class HomeController extends ChangeNotifier {
     if (wifiManager == null) return;
     if (!silent) {
       _wifiNetworksLoading = true;
-      notifyListeners();
+      _notify();
       log(l10n.logSearchingWifi);
     }
     try {
       final networks = await wifiManager!.scanNetworks();
-      _wifiNetworks = networks;
-      if (!silent) log(l10n.logNetworksFound(networks.length));
+      final unique = networks.toSet().toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      _wifiNetworks = unique;
+      if (!silent) log(l10n.logNetworksFound(unique.length));
     } catch (e) {
       if (!silent) log(l10n.logScanWifiError('$e'), isError: true);
     } finally {
       _wifiNetworksLoading = false;
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -486,11 +384,11 @@ class HomeController extends ChangeNotifier {
       } else {
         if (!silent) log(l10n.logNoActiveWifi);
       }
-      notifyListeners();
+      _notify();
       return info;
     } catch (e) {
       if (!silent) log(l10n.logCurrentNetworkError('$e'), isError: true);
-      notifyListeners();
+      _notify();
       return null;
     }
   }
@@ -526,7 +424,7 @@ class HomeController extends ChangeNotifier {
     selectedServerPresetId = preset.id;
     if (announce) {
       log(l10n.logPresetApplied(preset.label, preset.host));
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -573,7 +471,17 @@ class HomeController extends ChangeNotifier {
       if (updateGuidance) applyServerPreset(best, announce: false);
       return best;
     }
-    final fallback = serverPresets.first;
+    ServerPreset? fallback;
+    for (final preset in serverPresets) {
+      if (preset.isConfigured) {
+        fallback = preset;
+        break;
+      }
+    }
+    if (fallback == null) {
+      log(l10n.presetsEmptySubtitle, isError: true);
+      return null;
+    }
     log(
       l10n.logNoServerResponded(fallback.label),
       isError: true,
@@ -586,7 +494,7 @@ class HomeController extends ChangeNotifier {
     if (_busy) return;
     clearGuidance();
     _busy = true;
-    notifyListeners();
+    _notify();
     try {
       final connected = await connectSelectedWifi(requireSelection: true);
       if (connected) {
@@ -626,7 +534,7 @@ class HomeController extends ChangeNotifier {
     } finally {
       wifiPasswordCtrl.clear();
       _busy = false;
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -667,11 +575,24 @@ class HomeController extends ChangeNotifier {
   }
 
   Future<bool> connectSelectedWifi({required bool requireSelection}) async {
-    final selectedWifi = resolvedWifiSsid();
-    if (selectedWifi.isEmpty) {
+    final rawWifi = resolvedWifiSsid();
+    if (rawWifi.isEmpty) {
       if (requireSelection) {
         log(l10n.logNoWifiSelected, isError: true);
       }
+      return false;
+    }
+    final String selectedWifi;
+    try {
+      selectedWifi = InputSanitizer.sanitizeSsid(
+        rawWifi,
+        fieldName: l10n.wifiNetworkName,
+      );
+    } on ArgumentError catch (e) {
+      log(
+        l10n.logInvalidConfiguration(l10n.wifiNetworkName, '$e'),
+        isError: true,
+      );
       return false;
     }
     final password = wifiPasswordCtrl.text;
@@ -786,9 +707,35 @@ class HomeController extends ChangeNotifier {
 
   String? _diagnosticTarget() {
     final rdpHost = rdpHostCtrl.text.trim();
-    if (rdpHost.isNotEmpty) return rdpHost;
+    if (rdpHost.isNotEmpty) {
+      try {
+        return InputSanitizer.sanitizeHostname(
+          rdpHost,
+          fieldName: l10n.rdpServer,
+        );
+      } on ArgumentError catch (e) {
+        log(
+          l10n.logInvalidConfiguration(l10n.rdpServer, '$e'),
+          isError: true,
+        );
+        return null;
+      }
+    }
     final gateway = gatewayCtrl.text.trim();
-    if (gateway.isNotEmpty) return gateway;
+    if (gateway.isNotEmpty) {
+      try {
+        return InputSanitizer.sanitizeIpv4(
+          gateway,
+          fieldName: l10n.gateway,
+        );
+      } on ArgumentError catch (e) {
+        log(
+          l10n.logInvalidConfiguration(l10n.gateway, '$e'),
+          isError: true,
+        );
+        return null;
+      }
+    }
     return null;
   }
 
@@ -797,7 +744,7 @@ class HomeController extends ChangeNotifier {
     clearGuidance();
     _busy = true;
     _step = ConnectionStep.diagnostics;
-    notifyListeners();
+    _notify();
     log(l10n.logDiagnosticsStart);
 
     try {
@@ -846,34 +793,38 @@ class HomeController extends ChangeNotifier {
         ],
       );
       _step = ConnectionStep.idle;
-      notifyListeners();
+      _notify();
     } catch (e) {
       log(l10n.logDiagnosticsFailed('$e'), isError: true);
       setErrorGuidance(e);
       _step = ConnectionStep.error;
-      notifyListeners();
+      _notify();
     } finally {
       _busy = false;
-      notifyListeners();
+      _notify();
     }
   }
 
   Future<void> runConnectionTroubleshooter() async {
     if (_busy) return;
-    final gateway = gatewayCtrl.text.trim();
-    final iface = ifaceCtrl.text.trim();
-    final subnets = parseSubnets();
+    var gateway = gatewayCtrl.text.trim();
+    var iface = ifaceCtrl.text.trim();
+    var subnets = parseSubnets();
     final findings = <String>[];
 
     clearGuidance();
     _busy = true;
     _step = ConnectionStep.diagnostics;
-    notifyListeners();
+    _notify();
     log(l10n.logTroubleshooterStart);
 
     try {
       await saveSettings();
       final wifiInfo = await syncCurrentWifiInfo(silent: true);
+      gateway = gatewayCtrl.text.trim();
+      iface = ifaceCtrl.text.trim();
+      subnets = parseSubnets();
+
       if (wifiInfo == null || wifiInfo.ssid.trim().isEmpty) {
         log(l10n.logNoActiveWifiError, isError: true);
         findings.add(l10n.findingNoActiveWifi);
@@ -891,6 +842,8 @@ class HomeController extends ChangeNotifier {
         );
       }
 
+      String? safeGateway;
+      String? safeIface;
       if (gateway.isEmpty || iface.isEmpty) {
         log(
           l10n.logMissingGatewayInterface,
@@ -898,7 +851,33 @@ class HomeController extends ChangeNotifier {
         );
         findings.add(l10n.findingMissingGatewayInterface);
       } else {
-        log(l10n.logBaseConfigReady(gateway, iface));
+        try {
+          safeGateway = InputSanitizer.sanitizeIpv4(
+            gateway,
+            fieldName: l10n.gateway,
+          );
+        } on ArgumentError catch (e) {
+          log(
+            l10n.logInvalidConfiguration(l10n.gateway, '$e'),
+            isError: true,
+          );
+          findings.add(l10n.findingInvalidConfiguration(l10n.gateway));
+        }
+        try {
+          safeIface = InputSanitizer.sanitizeInterfaceName(
+            iface,
+            fieldName: l10n.networkInterface,
+          );
+        } on ArgumentError catch (e) {
+          log(
+            l10n.logInvalidConfiguration(l10n.networkInterface, '$e'),
+            isError: true,
+          );
+          findings.add(l10n.findingInvalidConfiguration(l10n.networkInterface));
+        }
+        if (safeGateway != null && safeIface != null) {
+          log(l10n.logBaseConfigReady(safeGateway, safeIface));
+        }
       }
 
       if (preferMostStableServer &&
@@ -907,7 +886,25 @@ class HomeController extends ChangeNotifier {
         await diagnoseBestServerPreset(updateGuidance: false);
       }
 
-      final resolvedHost = rdpHostCtrl.text.trim();
+      List<String>? safeSubnets;
+      if (subnets.isNotEmpty) {
+        try {
+          safeSubnets = InputSanitizer.sanitizeSubnets(
+            subnets,
+            fieldName: l10n.hospitalSubnets,
+          );
+        } on ArgumentError catch (e) {
+          log(
+            l10n.logInvalidConfiguration(l10n.hospitalSubnets, '$e'),
+            isError: true,
+          );
+          findings.add(
+            l10n.findingInvalidConfiguration(l10n.hospitalSubnets),
+          );
+        }
+      }
+
+      final rawHost = rdpHostCtrl.text.trim();
       final resolvedPort = parsePort();
 
       final available = await rdpLauncher.isRdpClientAvailable();
@@ -919,11 +916,11 @@ class HomeController extends ChangeNotifier {
         findings.add(l10n.findingRdpClientUnavailable);
       }
 
-      if (subnets.isNotEmpty && gateway.isNotEmpty && iface.isNotEmpty) {
+      if (safeSubnets != null && safeGateway != null && safeIface != null) {
         final missingRoutes = await routeManager.verifyRoutes(
-          hospitalSubnets: subnets,
-          gateway: gateway,
-          interfaceName: iface,
+          hospitalSubnets: safeSubnets,
+          gateway: safeGateway,
+          interfaceName: safeIface,
         );
         if (missingRoutes.isEmpty) {
           log(l10n.logRoutesPresent);
@@ -937,10 +934,26 @@ class HomeController extends ChangeNotifier {
         }
       }
 
-      if (resolvedHost.isEmpty) {
+      String? resolvedHost;
+      if (rawHost.isEmpty) {
         log(l10n.logMissingRdpHost, isError: true);
         findings.add(l10n.findingMissingRdpHost);
       } else {
+        try {
+          resolvedHost = InputSanitizer.sanitizeHostname(
+            rawHost,
+            fieldName: l10n.rdpServer,
+          );
+        } on ArgumentError catch (e) {
+          log(
+            l10n.logInvalidConfiguration(l10n.rdpServer, '$e'),
+            isError: true,
+          );
+          findings.add(l10n.findingInvalidConfiguration(l10n.rdpServer));
+        }
+      }
+
+      if (resolvedHost != null) {
         final ping = await networkDiagnostics.ping(resolvedHost);
         if (ping != null) {
           log(l10n.logIcmpResult(resolvedHost, ping));
@@ -1004,15 +1017,15 @@ class HomeController extends ChangeNotifier {
         );
       }
       _step = ConnectionStep.idle;
-      notifyListeners();
+      _notify();
     } catch (e) {
       log(l10n.logTroubleshooterFailed('$e'), isError: true);
       setErrorGuidance(e);
       _step = ConnectionStep.error;
-      notifyListeners();
+      _notify();
     } finally {
       _busy = false;
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -1028,7 +1041,7 @@ class HomeController extends ChangeNotifier {
     clearGuidance();
     _busy = true;
     _step = ConnectionStep.diagnostics;
-    notifyListeners();
+    _notify();
 
     try {
       await _saveSettingsSafely();
@@ -1140,7 +1153,7 @@ class HomeController extends ChangeNotifier {
             : null,
         onSplitTunnelEnabled: (subnets, gateway, iface) async {
           _splitTunnelActive = true;
-          notifyListeners();
+          _notify();
           await _persistSplitTunnelCleanup(
             subnets: subnets,
             gateway: gateway,
@@ -1149,11 +1162,11 @@ class HomeController extends ChangeNotifier {
         },
         onSplitTunnelUnavailable: () async {
           _splitTunnelActive = false;
-          notifyListeners();
+          _notify();
         },
         onSplitTunnelRolledBack: () async {
           _splitTunnelActive = false;
-          notifyListeners();
+          _notify();
           try {
             await settings?.clearPendingSplitTunnelCleanup();
           } catch (_) {
@@ -1162,9 +1175,6 @@ class HomeController extends ChangeNotifier {
         },
       )) {
         _step = state.step;
-        if (state.step == ConnectionStep.error) {
-          _splitTunnelActive = false;
-        }
         log(state.logMessage, isError: state.isError);
 
         if (state.isFinished && !state.isError) {
@@ -1179,7 +1189,7 @@ class HomeController extends ChangeNotifier {
         } else if (state.isFinished && state.isError) {
           setErrorGuidanceType(state.errorType ?? MedLinkErrorType.unknown);
         }
-        notifyListeners();
+        _notify();
       }
     } finally {
       wifiPasswordCtrl.clear();
@@ -1187,7 +1197,7 @@ class HomeController extends ChangeNotifier {
       if (_step == ConnectionStep.diagnostics) {
         _step = ConnectionStep.idle;
       }
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -1195,7 +1205,7 @@ class HomeController extends ChangeNotifier {
     if (_busy) return;
     clearGuidance();
     _busy = true;
-    notifyListeners();
+    _notify();
     log(l10n.logDisconnecting);
     try {
       final msg = await routeManager.disableSplitTunnel();
@@ -1206,7 +1216,7 @@ class HomeController extends ChangeNotifier {
       } catch (e) {
         log(l10n.logClearRouteRecordError('$e'), isError: true);
       }
-      notifyListeners();
+      _notify();
       setReadyGuidance();
     } catch (e) {
       log(l10n.logDisconnectError('$e'), isError: true);
@@ -1214,36 +1224,62 @@ class HomeController extends ChangeNotifier {
     } finally {
       _busy = false;
       _step = ConnectionStep.idle;
-      notifyListeners();
+      _notify();
     }
   }
 
   Future<void> resetSettings() async {
+    if (_busy) return;
     final s = settings;
     if (s == null) return;
-    await s.clear();
 
-    subnetsCtrl.text = s.hospitalSubnetsAsText;
-    gatewayCtrl.text = s.gateway;
-    ifaceCtrl.text = s.interfaceName;
-    rdpHostCtrl.text = s.rdpHost;
-    rdpPortCtrl.text = s.rdpPort.toString();
-    rdpUserCtrl.text = s.rdpUsername;
-    rdpDomainCtrl.text = s.rdpDomain;
-    rdpProfile = s.rdpProfile;
-    _preferMostStableServer = s.preferMostStableServer;
-    selectedWifiSsid = s.wifiSsid.isEmpty ? null : s.wifiSsid;
-    manualWifiCtrl.text = s.wifiSsid;
-    _selectedServerPresetId = s.selectedServerPresetId;
-    wifiPasswordCtrl.clear();
-    notifyListeners();
-    log(l10n.logSettingsReset);
-    refreshWifiNetworks(silent: true);
-    syncCurrentWifiInfo(silent: true);
+    _busy = true;
+    _notify();
+    try {
+      final cleaned = await _cleanupStaleSplitTunnel();
+      if (!cleaned) {
+        setErrorGuidance(
+          const RouteConfigurationException(
+            'No se pudieron retirar las rutas de una sesión anterior.',
+          ),
+        );
+        return;
+      }
+      if (_splitTunnelActive) {
+        await routeManager.disableSplitTunnel();
+        _splitTunnelActive = false;
+      }
+      await s.clear();
+
+      subnetsCtrl.text = s.hospitalSubnetsAsText;
+      gatewayCtrl.text = s.gateway;
+      ifaceCtrl.text = s.interfaceName;
+      rdpHostCtrl.text = s.rdpHost;
+      rdpPortCtrl.text = s.rdpPort.toString();
+      rdpUserCtrl.text = s.rdpUsername;
+      rdpDomainCtrl.text = s.rdpDomain;
+      rdpProfile = s.rdpProfile;
+      _preferMostStableServer = s.preferMostStableServer;
+      selectedWifiSsid = s.wifiSsid.isEmpty ? null : s.wifiSsid;
+      manualWifiCtrl.text = s.wifiSsid;
+      _selectedServerPresetId = s.selectedServerPresetId;
+      wifiPasswordCtrl.clear();
+      _notify();
+      log(l10n.logSettingsReset);
+      refreshWifiNetworks(silent: true);
+      syncCurrentWifiInfo(silent: true);
+    } catch (e) {
+      log(l10n.logDisconnectError('$e'), isError: true);
+      setErrorGuidance(e);
+    } finally {
+      _busy = false;
+      _notify();
+    }
   }
 
   @override
   void dispose() {
+    _disposed = true;
     subnetsCtrl.dispose();
     gatewayCtrl.dispose();
     ifaceCtrl.dispose();

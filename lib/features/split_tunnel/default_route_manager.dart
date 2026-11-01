@@ -198,12 +198,33 @@ class DefaultRouteManager implements RouteManager {
     required String gateway,
     required String interfaceName,
   }) async {
+    final List<String> sanitizedSubnets;
+    final String sanitizedGateway;
+    final String sanitizedIface;
+    try {
+      sanitizedSubnets = InputSanitizer.sanitizeSubnets(
+        hospitalSubnets,
+        fieldName: 'Subredes',
+      );
+      sanitizedGateway = InputSanitizer.sanitizeIpv4(
+        gateway,
+        fieldName: 'Puerta de enlace',
+      );
+      sanitizedIface = InputSanitizer.sanitizeInterfaceName(
+        interfaceName,
+        fieldName: 'Interfaz',
+      );
+    } on ArgumentError catch (e) {
+      throw RouteConfigurationException(
+        'Validación fallida al verificar rutas: ${e.message}',
+      );
+    }
     try {
       final result =
           await _channel.invokeMethod<List<dynamic>>('verifyRoutes', {
-        'hospitalSubnets': hospitalSubnets,
-        'gateway': gateway,
-        'interfaceName': interfaceName,
+        'hospitalSubnets': sanitizedSubnets,
+        'gateway': sanitizedGateway,
+        'interfaceName': sanitizedIface,
       });
       if (result == null) return const <String>[];
       final missing = result.cast<String>();
@@ -212,9 +233,9 @@ class DefaultRouteManager implements RouteManager {
         await Future<void>.delayed(const Duration(milliseconds: 800));
         final retry =
             await _channel.invokeMethod<List<dynamic>>('verifyRoutes', {
-          'hospitalSubnets': hospitalSubnets,
-          'gateway': gateway,
-          'interfaceName': interfaceName,
+          'hospitalSubnets': sanitizedSubnets,
+          'gateway': sanitizedGateway,
+          'interfaceName': sanitizedIface,
         });
         if (retry == null) return missing;
         return retry.cast<String>();

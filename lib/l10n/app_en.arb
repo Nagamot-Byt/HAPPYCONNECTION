@@ -219,5 +219,164 @@
   "logDisconnecting": "Disconnecting: disabling split tunnel…",
   "logClearRouteRecordError": "Could not clear the route record: {error}",
   "logDisconnectError": "Error disconnecting: {error}",
-  "logSettingsReset": "Settings restored to defaults."
+  "logInvalidConfiguration": "Invalid configuration in {field}: {error}",
+  "@logInvalidConfiguration": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "findingInvalidConfiguration": "Check the {field} field: the value is not valid.",
+  "@findingInvalidConfiguration": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "logSettingsReset": "Settings restored to defaults.",
+  "fieldInterface": "Interface",
+  "logWorkflowStart": "Starting full connection flow…",
+  "logWorkflowAlreadyConnected": "Already connected to Wi-Fi \"{ssid}\".",
+  "@logWorkflowAlreadyConnected": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowStepWifi": "Step 0/4 — Connecting to Wi-Fi",
+  "logWorkflowWifiConnected": "Wi-Fi connected to \"{ssid}\". Gateway {gateway}, Interface {iface}.",
+  "@logWorkflowWifiConnected": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      },
+      "gateway": {
+        "type": "String"
+      },
+      "iface": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowWifiUnavailable": "Automatic Wi-Fi control is unavailable on this platform; the current network will be used.",
+  "logWorkflowNoAutoNetwork": "No gateway/interface was detected automatically. Configured values will be used.",
+  "logWorkflowStepPrepare": "Step 1/4 — Preparing the connection\nAggressive network resets are skipped to avoid unnecessary delays and outages.",
+  "logWorkflowStepTunnel": "Step 2/4 — Enabling split tunnel for {count} subnet(s)",
+  "@logWorkflowStepTunnel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorRoutesMissing": "Not all hospital routes were verified. Missing: {routes}.",
+  "@errorRoutesMissing": {
+    "placeholders": {
+      "routes": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowRoutesVerified": "Hospital routes verified successfully.",
+  "logWorkflowTunnelUnavailable": "Split tunnel is unavailable on this platform ({error}). The system routes will be used; make sure you are on the hospital network.",
+  "@logWorkflowTunnelUnavailable": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowStepVerify": "Step 3/4 — Verifying destination reachability and RDP client",
+  "logWorkflowDnsResolved": "DNS resolved {host} to {address}.",
+  "@logWorkflowDnsResolved": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowDnsTimeout": "DNS resolution took longer than 4s. The reachability test will continue.",
+  "logWorkflowDnsError": "Could not resolve DNS for {host} ({error}). If the name is internal, connect to the hospital network or DNS.",
+  "@logWorkflowDnsError": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logCauseLabel": "Cause: {error}.",
+  "@logCauseLabel": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowIcmpOk": "RDP host {host} responds in {ms}ms.",
+  "@logWorkflowIcmpOk": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "logWorkflowIcmpFailed": "The RDP host did not respond to ICMP. If the server blocks ping, RDP will still be attempted.",
+  "errorTcpUnreachable": "Could not open TCP port {port} on {host}. Check routes, firewall, or RDP server availability.",
+  "@errorTcpUnreachable": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      },
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowTcpOpen": "TCP port {port} reachable in {ms}ms.",
+  "@logWorkflowTcpOpen": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "logWorkflowStepLaunch": "Step 4/4 — Launching RDP connection",
+  "errorRdpClientMissing": "No RDP client is installed. Install or enable Microsoft Remote Desktop Connection.",
+  "errorRdpHandlerMissing": "No handler was found for rdp://. Install or configure a compatible RDP client.",
+  "logWorkflowRollbackStart": "Re-disabling split tunnel due to an error...",
+  "logWorkflowRollbackDone": "Split tunnel disabled successfully.",
+  "logWorkflowRollbackError": "Could not disable the tunnel: {error}",
+  "@logWorkflowRollbackError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowError": "Error: {error}",
+  "@logWorkflowError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }

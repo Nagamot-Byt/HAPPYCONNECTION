@@ -31,9 +31,9 @@ MedLink Connect **NO** implementa un túnel VPN completo (WireGuard/OpenVPN). Ut
 |---|---|---|
 | **Windows** | Validado / Principal | Requiere **Ejecutar como Administrador** para modificar rutas estáticas |
 | **Linux** | Compilable / experimental | `flutter build linux --release` verificado. Wi-Fi nativo no implementado; rutas requieren `sudo`/polkit |
-| **macOS** | RDP sobre red existente | Split tunnel no disponible: requiere helper privilegiado. Guía de compilación en `dist/macOS/` |
-| **Android** | Compilable / experimental | APK y AAB release verificados (2026-10-30). El Wi-Fi se toma de la red actual; las rutas requieren root. RDP se abre con un cliente externo |
-| **iOS** | Experimental | Requiere `NetworkExtension` para rutas; RDP se abre con un cliente externo |
+| **macOS** | RDP sobre red existente / split tunnel no soportado | Requiere un helper privilegiado (`SMAppService`) que no forma parte de este release. Guía de compilación en `dist/macOS/` |
+| **Android** | Compilable / experimental | APK y AAB release verificados con `targetSdk 36` (2026-10-30). Wi-Fi nativo no implementado: usar una red ya conectada; las rutas requieren root. RDP se abre con un cliente externo |
+| **iOS** | RDP sobre red existente / split tunnel no soportado | Requiere `NetworkExtension` (`NEPacketTunnelProvider`) y entitlements de Personal VPN, fuera de este release |
 
 En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o WPA3 debe existir un perfil previo en el sistema operativo.
 
@@ -51,6 +51,8 @@ En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o W
 - macOS requiere un helper privilegiado para rutas; iOS requiere
   NetworkExtension. Sin ellos, el split tunnel no está soportado en esas
   plataformas.
+- El escaneo y conexión Wi-Fi nativos solo están implementados en Windows. En
+  Linux, macOS, Android e iOS hay que partir de una red ya conectada.
 
 ## Requisitos (Windows)
 
@@ -117,6 +119,14 @@ flutter run -d windows
 flutter test
 flutter analyze
 dart format .
+
+# Integración con plugins nativos (Linux/Windows/macOS)
+flutter test integration_test/app_integration_test.dart -d linux
+
+# Pruebas opt-in contra red hospitalaria real
+flutter test integration_test/live_network_test.dart -d <device> \
+  --dart-define=RDP_TEST_HOST=10.0.0.10 \
+  --dart-define=RDP_TEST_PORT=3389
 ```
 
 ## Licencia

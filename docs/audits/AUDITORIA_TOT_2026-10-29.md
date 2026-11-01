@@ -176,9 +176,10 @@ Pregunta raíz: **¿Es seguro y confiable desplegar MedLink Connect en el hospit
 | SEC-01 | Media | Sanitizador Dart de interfaz más permisivo que validadores nativos | `input_sanitizer.dart`, `MainActivity.kt`, `MainFlutterWindow.swift` | **Corregido** (modo estricto Android) |
 | SEC-02 | Baja | `.rdp` temporal incluye usuario/dominio | `windows/runner/rdp_launcher_plugin.cc` | Mitigado: sin contraseña, borrado posterior |
 | SEC-03 | Baja | Windows conserva clave en perfil WLAN | `wifi_manager_plugin.cc` | **Documentado** en README |
-| SEC-04 | Alta | macOS sin helper privilegiado para rutas | `macos/Runner/MainFlutterWindow.swift` | Abierto; split tunnel no disponible |
-| SEC-05 | Media | iOS sin NetworkExtension | `ios/Runner/AppDelegate.swift` | Abierto; limitación de plataforma |
+| SEC-04 | Alta | macOS sin helper privilegiado para rutas | `macos/Runner/MainFlutterWindow.swift` | **Fuera de alcance**: split tunnel macOS declarado no soportado en README |
+| SEC-05 | Media | iOS sin NetworkExtension | `ios/Runner/AppDelegate.swift` | **Fuera de alcance**: split tunnel iOS declarado no soportado en README |
 | SEC-06 | Media | Force-unwrap de `engine` en iOS | `ios/Runner/AppDelegate.swift` | **Corregido** |
+| AND-01 | Media | Android sin canal `wifi_manager`; escaneo/conexión Wi-Fi no implementados | `MainActivity.kt`, `default_wifi_manager.dart` | **Documentado**: requiere red preexistente |
 | FUN-01 | Alta | `splitTunnelActive` falso positivo al iniciar paso | `home_controller.dart` | **Corregido** |
 | FUN-02 | Media | Servidor autoseleccionado no persistido | `home_controller.dart` | **Corregido** |
 | FUN-03 | Media | Contraseña Wi-Fi retenida tras conexión only-Wi-Fi | `home_controller.dart` | **Corregido** |
@@ -186,17 +187,18 @@ Pregunta raíz: **¿Es seguro y confiable desplegar MedLink Connect en el hospit
 | FUN-05 | Media | Ping a 8.8.8.8 no representa conectividad hospitalaria | `home_controller.dart` | **Corregido** (host RDP/gateway) |
 | FUN-06 | Media | Diagnóstico oculta causa de fallo | `default_network_diagnostics.dart` | **Corregido** (`lastProbeError`) |
 | FUN-07 | Media | Clasificación de errores por texto/emoji | `home_controller.dart` | **Corregido** (`MedLinkErrorType`) |
-| ARQ-01 | Media | `HomeController` monolítico (~1158 líneas) | `home_controller.dart` | Abierto |
+| ARQ-01 | Media | `HomeController` monolítico (1294 líneas) | `home_controller.dart` | **Mitigado parcialmente**: presets/logs y guías de error extraídos; el controlador sigue grande |
 | ARQ-02 | Media | `mobile_rdp` desconectado y con proxy en memoria | `lib/mobile_rdp/` | **Decidido**: PoC aislado, fuera del release |
-| UI-01 | Alta | i18n incompleta pese a ARB es/en | `home_screen.dart`, widgets, controlador | **Corregido** (2026-10-30) |
+| UI-01 | Alta | i18n incompleta pese a ARB es/en | `home_screen.dart`, widgets, controlador, workflow | **Corregido**: UI, guías y logs del workflow localizados es/en |
 | UI-02 | Media | Tema claro/oscuro no reflejado en fondo | `home_screen.dart`, `app_theme.dart` | **Corregido** |
 | UI-03 | Media | Sin semántica/accesibilidad sistemática | widgets UI | **Corregido** (estado, pasos y logs) |
 | UI-04 | Baja | Logs usan emoji para nivel de error | `home_controller.dart`, `connection_logs_widget.dart` | **Corregido** (logs estructurados) |
 | BLD-01 | Alta | Piso Flutter/SDK incompatible con APIs usadas | `pubspec.yaml` | **Corregido** |
 | BLD-02 | Media | Windows build no corre en push/PR | `.github/workflows/build-desktop.yml` | **Corregido** |
 | BLD-03 | Media | Apple CI encolado / validación inestable | run `40996941485` | **Mitigado**: workflow manual |
-| TEST-01 | Media | Cobertura 55.4%, módulos nativos/UI sin pruebas | `coverage/lcov.info` | **Parcial**: 60 pruebas y diagnóstico cubierto |
-| TEST-02 | Media | Sin pruebas de integración reales de red/RDP | `test/` | Abierto |
+| BLD-04 | Media | Android heredaba `targetSdk` de Flutter | `android/app/build.gradle.kts` | **Corregido**: `compileSdk`/`targetSdk` 36 |
+| TEST-01 | Media | Cobertura 64,8%, módulos nativos/UI sin pruebas | `coverage/lcov.info` | **Parcial**: 75 pruebas, UI y diagnóstico cubiertos |
+| TEST-02 | Media | Sin pruebas de integración reales de red/RDP | `integration_test/` | **Parcial**: smoke Linux real y harness opt-in; falta hardware/CI externa |
 
 ## 5. Plan de acción
 
@@ -308,3 +310,126 @@ flutter test                     → 60 tests passed
 
 Artefactos: `dist/Android/MedLinkConnect_0.1.0.apk` y
 `dist/Android/MedLinkConnect_0.1.0.aab`, firmados con la clave de depuración.
+
+## 11. Actualización 2026-10-30 (endurecimiento Android/Linux y verificación)
+
+### Cerrado o mitigado
+
+- **Rutas Android:** `runShell` lee la salida en un hilo separado y aplica
+  timeout de 20 s sin bloquearse; se eliminó el host de ping por defecto;
+  `flushDns`/`clearCaches` exigen root y comprueban el código de salida.
+- **Rollback Android:** se registran las rutas añadidas y se eliminan con
+  coincidencia exacta de `via`/`dev`; el seguimiento está sincronizado para
+  evitar carreras entre conexiones.
+- **Verificación de rutas:** el canal Android valida argumentos y parsea tokens
+  exactos, evitando falsos positivos por subcadenas. Dart valida subredes,
+  gateway e interfaz antes de invocar el canal.
+- **Privilegios Linux:** `run_privileged` solo recurre a `pkexec` cuando `sudo`
+  falla por falta de TTY/credenciales, no ante errores normales del comando.
+  `flushDns` devuelve `error_comando` si ninguna estrategia funciona.
+- **Controlador:** reset bloqueado durante operaciones y abortado si quedan
+  rutas previas; el SSID vacío se guarda explícitamente; las redes Wi-Fi se
+  deduplican/ordenan; el diagnóstico usa gateway/interfaz recién sincronizados
+  y rechaza valores inválidos antes de tocar el nativo.
+- **Rollback:** un fallo al deshabilitar el túnel ya no marca el túnel como
+  inactivo, evitando que la UI oculte rutas todavía presentes.
+- **Lifecycle:** las notificaciones del controlador se omiten tras `dispose`.
+- **Apple CI:** runners migrados a `macos-15`; `pod install` deja de enmascarar
+  errores con `|| true`.
+
+### Verificación ejecutada
+
+```text
+flutter analyze lib test          → No issues found
+flutter test --coverage           → 67 tests passed
+cobertura de líneas               → 63,3 % (1072/1694)
+flutter build apk --debug         → OK
+flutter build apk --release       → OK (22.2 MB)
+flutter build appbundle --release → OK (23.1 MB)
+flutter build linux --release     → OK
+```
+
+### Hallazgos abiertos en ese momento (ver sección 12 para el estado actual)
+
+| ID | Severidad | Estado |
+|---|---|---|
+| ARQ-01 | Media | `HomeController` sigue siendo un monolito; no se refactorizó en esta sesión. |
+| SEC-04 | Alta | macOS sin helper privilegiado; split tunnel no operativo. |
+| SEC-05 | Media | iOS requiere NetworkExtension; limitación de plataforma. |
+| TEST-02 | Media | Sin pruebas de integración reales de Wi-Fi, root, rutas y RDP. |
+| UI-01 | Baja | `connection_workflow_service.dart` aún emite mensajes de log en español hardcodeado; el resto de UI/guías está localizado. |
+| BLD-04 | Media | Flutter 3.27 fija `targetSdk` heredado; revisar el requisito de Google Play 2026 antes de publicar en Android. |
+| NAT-01 | Baja | macOS conserva ramas de rutas inalcanzables por el bloqueo de métodos privilegiados. |
+
+No se pudo validar Windows, macOS ni iOS localmente en este entorno; la
+verificación de esas plataformas queda sujeta a CI y a equipos reales.
+
+## 12. Actualización 2026-10-30 (bloques finales)
+
+### Bloque 1 — i18n del workflow y Android 36
+
+- **UI-01 cerrado:** `ConnectionWorkflowService` recibe `AppLocalizations` y
+  todos sus logs/errores visibles usan claves es/en.
+- **BLD-04 cerrado:** `compileSdk` y `targetSdk` fijados en 36. El APK release
+  declara `minSdk 21`, `targetSdk 36` y `compileSdk 36`.
+- SDK 36 y build-tools 36 instalados y usados en la compilación local.
+
+### Bloque 2 — Refactor y alcance macOS/iOS
+
+- **ARQ-01 mitigado parcialmente:** `ServerPreset`, `ConnectionLogEntry` y
+  `ConnectionLogStore` se movieron a `home_models.dart`; la clasificación y las
+  guías de error se movieron a `error_guidance.dart`. `HomeController` conserva
+  1294 líneas y sigue siendo el principal punto de complejidad.
+- **SEC-04/SEC-05 fuera de alcance:** README declara explícitamente que el split
+  tunnel macOS/iOS no está soportado en este release. El código muerto de rutas
+  macOS permanece y no se anuncia como funcionalidad.
+
+### Bloque 3 — Integración nativa
+
+- Añadido `integration_test/app_integration_test.dart` con arranque real de la
+  app y llamadas reales a los canales Linux de diagnóstico y rutas.
+- Añadido `integration_test/live_network_test.dart` opt-in para RDP, Wi-Fi y
+  rutas privilegiadas mediante `--dart-define`.
+- **TEST-02 parcial:** el smoke Linux pasa; la validación Wi-Fi/root/RDP real y
+  el CI Windows/macOS/iOS siguen pendientes de hardware, red hospitalaria y
+  publicación de los cambios.
+- **AND-01 (nuevo, Media):** Android no registra el canal
+  `com.medlinkconnect/wifi_manager`; escaneo/conexión Wi-Fi no están
+  implementados. La app solo puede partir de una red ya conectada en Android.
+  README corregido para no prometer lo contrario.
+
+### Verificación ejecutada
+
+```text
+flutter analyze lib test integration_test       → No issues found
+flutter test --coverage                         → 75 tests passed
+cobertura de líneas                             → 64,8 % (1132/1747)
+flutter test integration_test/app_integration_test.dart -d linux
+                                                 → 3 tests passed
+flutter build linux --release                   → OK
+flutter build apk --release                     → OK (22.2 MB)
+flutter build appbundle --release               → OK (23.0 MB)
+```
+
+### Pendiente externo
+
+1. Ejecutar `live_network_test.dart` en un Android/Windows con Wi-Fi
+   hospitalaria, root/Administrador y servidor RDP alcanzable.
+2. Publicar los cambios y validar CI Windows/macOS/iOS, incluida la ejecución
+   del smoke de integración en cada plataforma.
+3. Decidir si se implementa el canal Wi-Fi Android (AND-01) o se mantiene el
+   alcance documentado de red preexistente.
+
+### Para retomar la próxima sesión
+
+```bash
+export PATH=/home/daniel/flutter/bin:/home/daniel/.local/jdk-17/bin:$PATH
+flutter pub get
+flutter analyze lib test integration_test
+flutter test --coverage
+xvfb-run -a flutter test integration_test/app_integration_test.dart -d linux
+```
+
+Estado del árbol: cambios sin commit. No se publicó nada en GitHub. Antes de
+continuar, revisar `git status`; el siguiente paso requiere autorización para
+commit/push o acceso a hardware/red hospitalaria para las pruebas live.

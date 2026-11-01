@@ -27,6 +27,7 @@ import java.net.NetworkInterface
 import java.net.Socket
 import java.nio.charset.Charset
 import java.text.ParseException
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 class MainActivity : FlutterActivity() {
@@ -35,7 +36,8 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL_ROUTE = "com.medlinkconnect/route_manager"
     private val CHANNEL_RDP = "com.medlinkconnect/rdp_launcher"
 
-    private var trackedRoutes: MutableList<String> = mutableListOf()
+    private val trackedRoutes: MutableList<String> = mutableListOf()
+    private val routeLock = Any()
 
     private val safeHost = Regex("^[A-Za-z0-9._:%-]+$")
     private val safeInterface = Regex("^[A-Za-z0-9_.:-]+$")
@@ -54,7 +56,11 @@ class MainActivity : FlutterActivity() {
                 "flushDns" -> handleFlushDns(result)
                 "clearNetworkCaches" -> handleClearCaches(result)
                 "ping" -> {
-                    val host = call.argument<String>("host") ?: "8.8.8.8"
+                    val host = call.argument<String>("host")
+                    if (host == null) {
+                        result.error("argumento_invalido", "Falta host", null)
+                        return@setMethodCallHandler
+                    }
                     handlePing(host, result)
                 }
                 "checkTcpPort" -> {
@@ -147,14 +153,28 @@ class MainActivity : FlutterActivity() {
     // ============================================================
     private fun runShell(cmd: String): Pair<Int, String> {
         return try {
-            val proc = Runtime.getRuntime().exec(arrayOf("sh", "-c", cmd))
-            val reader = BufferedReader(InputStreamReader(proc.inputStream, Charsets.UTF_8))
-            val errReader = BufferedReader(InputStreamReader(proc.errorStream, Charsets.UTF_8))
-            val out = StringBuilder()
-            reader.lineSequence().forEach { out.append(it).append('\n') }
-            errReader.lineSequence().forEach { out.append(it).append('\n') }
-            val code = proc.waitFor()
-            Pair(code, out.toString().trim())
+            val proc = ProcessBuilder("sh", "-c", cmd)
+                .redirectErrorStream(true)
+                .start()
+            val output = StringBuilder()
+            val reader = Thread {
+                try {
+                    BufferedReader(
+                        InputStreamReader(proc.inputStream, Charsets.UTF_8)
+                    ).use { output.append(it.readText()) }
+                } catch (_: Throwable) {
+                    // The process may be destroyed on timeout; keep partial output.
+                }
+            }
+            reader.start()
+            val finished = proc.waitFor(20, TimeUnit.SECONDS)
+            if (!finished) {
+                proc.destroyForcibly()
+                reader.join(2000)
+                return Pair(-1, "Tiempo de espera agotado al ejecutar el comando.")
+            }
+            reader.join(2000)
+            Pair(proc.exitValue(), output.toString().trim())
         } catch (t: Throwable) {
             Pair(-1, "Excepción: ${t.message}")
         }
@@ -182,20 +202,61 @@ class MainActivity : FlutterActivity() {
     // ============================================================
     private fun handleFlushDns(result: MethodChannel.Result) {
         CoroutineScope(Dispatchers.IO).launch {
-            // Note: Android doesn't expose per-app DNS flush; try connectvity tricks + release network cache.
-            // For best results we require `su` with ndc resolver clearnetdns.
-            val r1 = runShell("su -c 'ndc resolver clearnetdns' 2>&1 || true")
-            val r2 = runShell("su -c 'ndc resolver flushdefaultif' 2>&1 || true")
-            val msg = "flush: DNS cleared (ndc resolver clearnetdns exit ${r1.first}, flushdefaultif ${r2.first})."
-            withContext(Dispatchers.Main) { result.success(msg) }
+            if (!isUptimeAsRoot()) {
+                withContext(Dispatchers.Main) {
+                    result.error(
+                        "permiso_denegado",
+                        "Se requieren privilegios ROOT (su) para limpiar la caché DNS.",
+                        null
+                    )
+                }
+                return@launch
+            }
+            // Android does not expose per-app DNS flush; ndc is best-effort and
+            // is not present on every Android version.
+            val r1 = runShell("su -c 'ndc resolver clearnetdns' 2>&1")
+            val r2 = runShell("su -c 'ndc resolver flushdefaultif' 2>&1")
+            val ok = r1.first == 0 || r2.first == 0
+            val detail = "ndc clearnetdns=${r1.first} (${r1.second.take(120)}), " +
+                "flushdefaultif=${r2.first} (${r2.second.take(120)})"
+            withContext(Dispatchers.Main) {
+                if (ok) {
+                    result.success("Caché DNS limpiada. $detail")
+                } else {
+                    result.error(
+                        "error_comando",
+                        "No se pudo limpiar la caché DNS. $detail",
+                        null
+                    )
+                }
+            }
         }
     }
 
     private fun handleClearCaches(result: MethodChannel.Result) {
         CoroutineScope(Dispatchers.IO).launch {
-            val r1 = runShell("su -c 'ip -s -s neigh flush all' 2>&1 || true")
-            val msg = "arp/neigh flush: exit ${r1.first} → ${r1.second.take(200)}"
-            withContext(Dispatchers.Main) { result.success(msg) }
+            if (!isUptimeAsRoot()) {
+                withContext(Dispatchers.Main) {
+                    result.error(
+                        "permiso_denegado",
+                        "Se requieren privilegios ROOT (su) para limpiar la tabla ARP/neigh.",
+                        null
+                    )
+                }
+                return@launch
+            }
+            val r1 = runShell("su -c 'ip -s -s neigh flush all' 2>&1")
+            withContext(Dispatchers.Main) {
+                if (r1.first == 0) {
+                    result.success("Caché ARP/neigh limpiada. ${r1.second.take(200)}")
+                } else {
+                    result.error(
+                        "error_comando",
+                        "No se pudo limpiar la caché ARP/neigh: ${r1.second.take(200)}",
+                        null
+                    )
+                }
+            }
         }
     }
 
@@ -237,13 +298,11 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handleCheckTcpPort(host: String, port: Int, result: MethodChannel.Result) {
+        if (host.isBlank() || !safeHost.matches(host) || port <= 0 || port > 65535) {
+            result.error("argumento_invalido", "Host o puerto inválido", null)
+            return
+        }
         CoroutineScope(Dispatchers.IO).launch {
-            if (host.isBlank() || port <= 0 || port > 65535) {
-                withContext(Dispatchers.Main) {
-                    result.error("argumento_invalido", "Host o puerto inválido", null)
-                }
-                return@launch
-            }
             try {
                 val socket = Socket()
                 val start = System.currentTimeMillis()
@@ -308,6 +367,11 @@ class MainActivity : FlutterActivity() {
                     return@launch
                 }
             }
+            synchronized(routeLock) {
+                if (!trackedRoutes.contains(dest)) {
+                    trackedRoutes.add(dest)
+                }
+            }
             withContext(Dispatchers.Main) { result.success("Ruta $dest agregada exitosamente.") }
         }
     }
@@ -348,6 +412,9 @@ class MainActivity : FlutterActivity() {
                     return@launch
                 }
             }
+            synchronized(routeLock) {
+                trackedRoutes.removeAll { it == dest }
+            }
             withContext(Dispatchers.Main) { result.success("Ruta $dest eliminada.") }
         }
     }
@@ -379,9 +446,11 @@ class MainActivity : FlutterActivity() {
                 if (r.first != 0) {
                     val r2 = runShell("su -c 'route add -net $subnet gw $gw dev $iface' 2>&1")
                     if (r2.first != 0) {
-                        // Rollback
+                        // Rollback only the routes added in this attempt, using
+                        // the exact gateway/interface to avoid deleting another
+                        // route for the same destination.
                         for (prev in added) {
-                            runShell("su -c 'ip route del $prev' 2>&1 || true")
+                            runShell("su -c 'ip route del $prev via $gw dev $iface' 2>&1")
                         }
                         withContext(Dispatchers.Main) {
                             result.error("error_tunel_dividido",
@@ -392,7 +461,13 @@ class MainActivity : FlutterActivity() {
                 }
                 added.add(subnet)
             }
-            trackedRoutes.addAll(added)
+            synchronized(routeLock) {
+                for (subnet in added) {
+                    if (!trackedRoutes.contains(subnet)) {
+                        trackedRoutes.add(subnet)
+                    }
+                }
+            }
             withContext(Dispatchers.Main) {
                 result.success("Túnel dividido habilitado exitosamente. ${added.size} ruta(s) agregada(s).")
             }
@@ -401,7 +476,7 @@ class MainActivity : FlutterActivity() {
 
     private fun handleDisableSplit(result: MethodChannel.Result) {
         CoroutineScope(Dispatchers.IO).launch {
-            val current = ArrayList(trackedRoutes)
+            val current = synchronized(routeLock) { ArrayList(trackedRoutes) }
             if (current.isEmpty()) {
                 withContext(Dispatchers.Main) {
                     result.success("No hay rutas de túnel dividido activas.")
@@ -420,8 +495,10 @@ class MainActivity : FlutterActivity() {
                     msgs.add("Error al eliminar $dest: ${r.second.take(120)}")
                 }
             }
-            trackedRoutes.clear()
-            trackedRoutes.addAll(failed)
+            synchronized(routeLock) {
+                trackedRoutes.clear()
+                trackedRoutes.addAll(failed)
+            }
             withContext(Dispatchers.Main) {
                 if (failed.isEmpty()) {
                     result.success(msgs.joinToString(" "))
@@ -486,15 +563,36 @@ class MainActivity : FlutterActivity() {
         iface: String,
         result: MethodChannel.Result
     ) {
+        if (!isSafeIpv4(gw) || !safeInterface.matches(iface) ||
+            subnets.any { !safeCidr.matches(it.trim()) }
+        ) {
+            result.error("argumento_invalido", "Parámetros de verificación inválidos", null)
+            return
+        }
         CoroutineScope(Dispatchers.IO).launch {
             val routesOutput = runShell("ip route 2>&1").second
             val missing = mutableListOf<String>()
             for (rawSubnet in subnets) {
                 val subnet = rawSubnet.trim()
                 if (subnet.isEmpty()) continue
-                val present = routesOutput.contains(subnet) &&
-                    (gw.isBlank() || routesOutput.contains(gw)) &&
-                    (iface.isBlank() || routesOutput.contains(iface))
+                var present = false
+                for (line in routesOutput.lineSequence()) {
+                    val tokens = line.trim().split(Regex("\\s+"))
+                    if (tokens.firstOrNull() != subnet) continue
+                    var viaMatches = false
+                    var devMatches = false
+                    for (i in 0 until tokens.size - 1) {
+                        if (tokens[i] == "via" && tokens[i + 1] == gw) {
+                            viaMatches = true
+                        } else if (tokens[i] == "dev" && tokens[i + 1] == iface) {
+                            devMatches = true
+                        }
+                    }
+                    if (viaMatches && devMatches) {
+                        present = true
+                        break
+                    }
+                }
                 if (!present) {
                     missing.add(subnet)
                 }

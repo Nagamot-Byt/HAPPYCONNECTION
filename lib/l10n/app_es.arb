@@ -632,5 +632,164 @@
       }
     }
   },
-  "logSettingsReset": "Ajustes restablecidos a predeterminados."
+  "logInvalidConfiguration": "Configuración inválida en {field}: {error}",
+  "@logInvalidConfiguration": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "findingInvalidConfiguration": "Revisa el campo {field}: el valor no es válido.",
+  "@findingInvalidConfiguration": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "logSettingsReset": "Ajustes restablecidos a predeterminados.",
+  "fieldInterface": "Interfaz",
+  "logWorkflowStart": "Iniciando flujo completo de conexión…",
+  "logWorkflowAlreadyConnected": "Ya conectado a Wi-Fi \"{ssid}\".",
+  "@logWorkflowAlreadyConnected": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowStepWifi": "Paso 0/4 — Conectando a Wi-Fi",
+  "logWorkflowWifiConnected": "Wi-Fi conectado a \"{ssid}\". Gateway {gateway}, Interfaz {iface}.",
+  "@logWorkflowWifiConnected": {
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      },
+      "gateway": {
+        "type": "String"
+      },
+      "iface": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowWifiUnavailable": "El control automático de Wi-Fi no está disponible en esta plataforma; se usará la red actual.",
+  "logWorkflowNoAutoNetwork": "No se detectaron gateway/interfaz automáticamente. Se usarán los valores configurados.",
+  "logWorkflowStepPrepare": "Paso 1/4 — Preparando la conexión\nSe omiten resets agresivos de red para evitar demoras y cortes innecesarios.",
+  "logWorkflowStepTunnel": "Paso 2/4 — Habilitando túnel dividido para {count} subred(es)",
+  "@logWorkflowStepTunnel": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "errorRoutesMissing": "No se verificaron todas las rutas del hospital. Faltan: {routes}.",
+  "@errorRoutesMissing": {
+    "placeholders": {
+      "routes": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowRoutesVerified": "Rutas del hospital verificadas correctamente.",
+  "logWorkflowTunnelUnavailable": "Túnel dividido no disponible en esta plataforma ({error}). Se continuará usando las rutas del sistema; asegúrate de estar en la red del hospital.",
+  "@logWorkflowTunnelUnavailable": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowStepVerify": "Paso 3/4 — Verificando alcance al destino y cliente RDP",
+  "logWorkflowDnsResolved": "DNS resolvió {host} a {address}.",
+  "@logWorkflowDnsResolved": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowDnsTimeout": "La resolución DNS tardó más de 4s. Se continuará con la prueba de alcance.",
+  "logWorkflowDnsError": "No se pudo resolver DNS para {host} ({error}). Si el nombre es interno, conéctate a la red o DNS del hospital.",
+  "@logWorkflowDnsError": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logCauseLabel": "Causa: {error}.",
+  "@logCauseLabel": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowIcmpOk": "Host RDP {host} responde en {ms}ms.",
+  "@logWorkflowIcmpOk": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "logWorkflowIcmpFailed": "El host RDP no respondió a ICMP. Si el servidor bloquea ping, se intentará abrir RDP de todos modos.",
+  "errorTcpUnreachable": "No se pudo abrir el puerto TCP {port} en {host}. Revisa rutas, firewall o disponibilidad del servidor RDP.",
+  "@errorTcpUnreachable": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      },
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowTcpOpen": "Puerto TCP {port} accesible en {ms}ms.",
+  "@logWorkflowTcpOpen": {
+    "placeholders": {
+      "port": {
+        "type": "int"
+      },
+      "ms": {
+        "type": "int"
+      }
+    }
+  },
+  "logWorkflowStepLaunch": "Paso 4/4 — Lanzando conexión RDP",
+  "errorRdpClientMissing": "No hay un cliente RDP instalado. Instala o habilita Microsoft Remote Desktop Connection.",
+  "errorRdpHandlerMissing": "No se encontró un manejador para rdp://. Instala o configura un cliente RDP compatible.",
+  "logWorkflowRollbackStart": "Re-deshabilitando túnel dividido debido a error...",
+  "logWorkflowRollbackDone": "Túnel dividido deshabilitado correctamente.",
+  "logWorkflowRollbackError": "No se pudo deshabilitar el túnel: {error}",
+  "@logWorkflowRollbackError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "logWorkflowError": "Error: {error}",
+  "@logWorkflowError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  }
 }

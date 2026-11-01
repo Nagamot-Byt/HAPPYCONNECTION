@@ -5,7 +5,7 @@ on:
 
 jobs:
   macos:
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
         run: flutter config --enable-macos-desktop
 
       - name: Install macOS pods
-        run: pod install || true
+        run: pod install
         working-directory: macos
 
       - name: Build macOS release
@@ -55,7 +55,7 @@ jobs:
           if-no-files-found: error
 
   ios-simulator:
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -75,7 +75,7 @@ jobs:
         run: flutter config --enable-ios
 
       - name: Install iOS pods
-        run: pod install || true
+        run: pod install
         working-directory: ios
 
       - name: Build iOS for Simulator (no codesign)

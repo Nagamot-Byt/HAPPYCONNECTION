@@ -71,6 +71,19 @@ gboolean run_program(const std::vector<std::string>& args,
   return spawn_argv(args, stdout_out, stderr_out, exit_code);
 }
 
+bool sudo_needs_fallback(gboolean ran, const gchar* error_output,
+                         gint exit_code) {
+  if (!ran) return true;
+  if (exit_code == 0) return false;
+
+  const std::string error = error_output ? error_output : "";
+  return error.find("password is required") != std::string::npos ||
+         error.find("no tty present") != std::string::npos ||
+         error.find("a terminal is required") != std::string::npos ||
+         error.find("not in the sudoers") != std::string::npos ||
+         error.find("is not in the sudoers file") != std::string::npos;
+}
+
 gboolean run_privileged(const std::vector<std::string>& args,
                         gchar** stdout_out,
                         gchar** stderr_out,
@@ -81,12 +94,32 @@ gboolean run_privileged(const std::vector<std::string>& args,
 
   std::vector<std::string> sudo_args{"sudo", "-n"};
   sudo_args.insert(sudo_args.end(), args.begin(), args.end());
-  if (spawn_argv(sudo_args, stdout_out, stderr_out, exit_code) &&
-      exit_code && *exit_code == 0) {
-    return TRUE;
+
+  gchar* sudo_out = nullptr;
+  gchar* sudo_err = nullptr;
+  gint sudo_code = -1;
+  const gboolean sudo_ran =
+      spawn_argv(sudo_args, &sudo_out, &sudo_err, &sudo_code);
+
+  if (!sudo_needs_fallback(sudo_ran, sudo_err, sudo_code)) {
+    if (stdout_out) {
+      *stdout_out = sudo_out;
+    } else {
+      g_free(sudo_out);
+    }
+    if (stderr_out) {
+      *stderr_out = sudo_err;
+    } else {
+      g_free(sudo_err);
+    }
+    if (exit_code) *exit_code = sudo_code;
+    return sudo_ran;
   }
 
+  g_free(sudo_out);
+  g_free(sudo_err);
   clear_outputs(stdout_out, stderr_out);
+
   std::vector<std::string> pkexec_args{"pkexec"};
   pkexec_args.insert(pkexec_args.end(), args.begin(), args.end());
   return spawn_argv(pkexec_args, stdout_out, stderr_out, exit_code);

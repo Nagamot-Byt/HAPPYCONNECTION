@@ -9,6 +9,7 @@ import 'package:medlink_connect/core/network_diagnostics.dart';
 import 'package:medlink_connect/core/rdp_launcher.dart';
 import 'package:medlink_connect/core/exceptions.dart';
 import 'package:medlink_connect/core/input_sanitizer.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:medlink_connect/features/ui/home_controller.dart'
     show ConnectionStep;
 
@@ -41,6 +42,21 @@ class ConnectionWorkflowService {
       this.routeManager, this.networkDiagnostics, this.rdpLauncher,
       {this.wifiManager});
 
+  AppLocalizations? _l10n;
+
+  void configureLocalizations(AppLocalizations l10n) {
+    _l10n = l10n;
+  }
+
+  AppLocalizations get _t {
+    final l10n = _l10n;
+    if (l10n == null) {
+      throw StateError(
+          'ConnectionWorkflowService.localizations not configured');
+    }
+    return l10n;
+  }
+
   Stream<WorkflowState> connect({
     required List<String> subnets,
     required String host,
@@ -64,9 +80,9 @@ class ConnectionWorkflowService {
     var splitTunnelEnabledThisAttempt = false;
     var splitTunnelSetupAttempted = false;
 
-    yield const WorkflowState(
+    yield WorkflowState(
       step: ConnectionStep.diagnostics,
-      logMessage: 'Iniciando flujo completo de conexión…',
+      logMessage: _t.logWorkflowStart,
     );
 
     try {
@@ -74,20 +90,20 @@ class ConnectionWorkflowService {
       var effectivePort = resolvedPort;
 
       // Validate inputs using InputSanitizer
-      final sanitizedSubnets =
-          InputSanitizer.sanitizeSubnets(subnets, fieldName: 'Subredes');
+      final sanitizedSubnets = InputSanitizer.sanitizeSubnets(subnets,
+          fieldName: _t.hospitalSubnets);
       final sanitizedGateway =
-          InputSanitizer.sanitizeIpv4(gateway, fieldName: 'Puerta de enlace');
-      final sanitizedIface =
-          InputSanitizer.sanitizeInterfaceName(iface, fieldName: 'Interfaz');
+          InputSanitizer.sanitizeIpv4(gateway, fieldName: _t.gateway);
+      final sanitizedIface = InputSanitizer.sanitizeInterfaceName(iface,
+          fieldName: _t.fieldInterface);
       final sanitizedUser = user.trim().isEmpty
           ? null
           : InputSanitizer.sanitizeRdpCredential(user,
-              fieldName: 'Usuario RDP');
+              fieldName: _t.rdpUsername);
       final sanitizedDomain = domain.trim().isEmpty
           ? null
           : InputSanitizer.sanitizeRdpCredential(domain,
-              fieldName: 'Dominio RDP');
+              fieldName: _t.rdpDomain);
 
       String currentGateway = sanitizedGateway;
       String currentIface = sanitizedIface;
@@ -116,12 +132,12 @@ class ConnectionWorkflowService {
           if (alreadyConnected) {
             yield WorkflowState(
               step: ConnectionStep.diagnostics,
-              logMessage: 'Ya conectado a Wi-Fi "$targetSsid".',
+              logMessage: _t.logWorkflowAlreadyConnected(targetSsid),
             );
           } else {
-            yield const WorkflowState(
+            yield WorkflowState(
               step: ConnectionStep.diagnostics,
-              logMessage: 'Paso 0/4 — Conectando a Wi-Fi',
+              logMessage: _t.logWorkflowStepWifi,
             );
             final connectResult = await wifiManager!.connect(
               ssid: sanitizedSsid,
@@ -143,8 +159,11 @@ class ConnectionWorkflowService {
                 confirmed = true;
                 yield WorkflowState(
                   step: ConnectionStep.diagnostics,
-                  logMessage:
-                      'Wi-Fi conectado a "$targetSsid". Gateway $currentGateway, Interfaz $currentIface.',
+                  logMessage: _t.logWorkflowWifiConnected(
+                    targetSsid,
+                    currentGateway,
+                    currentIface,
+                  ),
                 );
                 break;
               } catch (_) {
@@ -155,16 +174,16 @@ class ConnectionWorkflowService {
             if (!confirmed) {
               final detail = connectResult.trim();
               throw WifiConnectionException(
-                'No se pudo confirmar la conexión Wi-Fi a "$targetSsid". '
-                '${detail.isEmpty ? 'El sistema no reportó la red objetivo.' : 'Respuesta del sistema: $detail'}',
+                detail.isEmpty
+                    ? _t.logWifiNotConfirmed(targetSsid)
+                    : _t.logWifiNotConfirmedWithResponse(targetSsid, detail),
               );
             }
           }
         } on MissingPluginException {
-          yield const WorkflowState(
+          yield WorkflowState(
             step: ConnectionStep.diagnostics,
-            logMessage:
-                'El control automático de Wi-Fi no está disponible en esta plataforma; se usará la red actual.',
+            logMessage: _t.logWorkflowWifiUnavailable,
             isError: true,
           );
         }
@@ -179,10 +198,9 @@ class ConnectionWorkflowService {
           } catch (_) {}
         }
         if (currentGateway.isEmpty || currentIface.isEmpty) {
-          yield const WorkflowState(
+          yield WorkflowState(
             step: ConnectionStep.diagnostics,
-            logMessage:
-                'No se detectaron gateway/interfaz automáticamente. Se usarán los valores configurados.',
+            logMessage: _t.logWorkflowNoAutoNetwork,
             isError: true,
           );
         }
@@ -191,22 +209,18 @@ class ConnectionWorkflowService {
         currentIface = sanitizedIface;
       }
 
-      yield const WorkflowState(
+      yield WorkflowState(
         step: ConnectionStep.splitTunnel,
-        logMessage:
-            'Paso 1/4 — Preparando la conexión\nSe omiten resets agresivos de red para evitar demoras y cortes innecesarios.',
+        logMessage: _t.logWorkflowStepPrepare,
       );
 
       if (currentGateway.isEmpty || currentIface.isEmpty) {
-        throw const RouteConfigurationException(
-          'Faltan gateway o interfaz para habilitar el túnel dividido. Usa "Detectar red actual" o completa los campos en Opciones avanzadas.',
-        );
+        throw RouteConfigurationException(_t.logMissingGatewayInterfaceHint);
       }
 
       yield WorkflowState(
         step: ConnectionStep.splitTunnel,
-        logMessage:
-            'Paso 2/4 — Habilitando túnel dividido para ${sanitizedSubnets.length} subred(es)',
+        logMessage: _t.logWorkflowStepTunnel(sanitizedSubnets.length),
       );
 
       try {
@@ -242,13 +256,13 @@ class ConnectionWorkflowService {
 
         if (missingRoutes.isNotEmpty) {
           throw RouteConfigurationException(
-            'No se verificaron todas las rutas del hospital. Faltan: ${missingRoutes.join(', ')}.',
+            _t.errorRoutesMissing(missingRoutes.join(', ')),
           );
         }
 
-        yield const WorkflowState(
+        yield WorkflowState(
             step: ConnectionStep.preLaunch,
-            logMessage: 'Rutas del hospital verificadas correctamente.');
+            logMessage: _t.logWorkflowRoutesVerified);
       } on RouteConfigurationException catch (e) {
         const fallbackPlatforms = {
           TargetPlatform.android,
@@ -287,9 +301,7 @@ class ConnectionWorkflowService {
         splitTunnelSetupAttempted = false;
         yield WorkflowState(
           step: ConnectionStep.preLaunch,
-          logMessage: 'Túnel dividido no disponible en esta plataforma ($e). '
-              'Se continuará usando las rutas del sistema; asegúrate de estar '
-              'en la red del hospital.',
+          logMessage: _t.logWorkflowTunnelUnavailable('$e'),
           isError: true,
         );
       }
@@ -304,23 +316,22 @@ class ConnectionWorkflowService {
         } catch (e) {
           yield WorkflowState(
             step: ConnectionStep.preLaunch,
-            logMessage:
-                'No se pudo seleccionar automáticamente el servidor ($e). Se usará el configurado.',
+            logMessage: _t.logSelectBestServerError('$e'),
             isError: true,
           );
         }
       }
 
       final sanitizedHost = InputSanitizer.sanitizeHostname(effectiveHost,
-          fieldName: 'Servidor RDP');
+          fieldName: _t.rdpServer);
       final sanitizedPort = InputSanitizer.sanitizePort(
         effectivePort.toString(),
-        fieldName: 'Puerto RDP',
+        fieldName: _t.rdpPort,
       );
 
-      yield const WorkflowState(
+      yield WorkflowState(
         step: ConnectionStep.preLaunch,
-        logMessage: 'Paso 3/4 — Verificando alcance al destino y cliente RDP',
+        logMessage: _t.logWorkflowStepVerify,
       );
 
       try {
@@ -329,22 +340,22 @@ class ConnectionWorkflowService {
         if (addresses.isNotEmpty) {
           yield WorkflowState(
             step: ConnectionStep.preLaunch,
-            logMessage:
-                'DNS resolvió $sanitizedHost a ${addresses.first.address}.',
+            logMessage: _t.logWorkflowDnsResolved(
+              sanitizedHost,
+              addresses.first.address,
+            ),
           );
         }
       } on TimeoutException {
-        yield const WorkflowState(
+        yield WorkflowState(
           step: ConnectionStep.preLaunch,
-          logMessage:
-              'La resolución DNS tardó más de 4s. Se continuará con la prueba de alcance.',
+          logMessage: _t.logWorkflowDnsTimeout,
           isError: true,
         );
       } catch (e) {
         yield WorkflowState(
           step: ConnectionStep.preLaunch,
-          logMessage:
-              'No se pudo resolver DNS para $sanitizedHost ($e). Si el nombre es interno, conéctate a la red o DNS del hospital.',
+          logMessage: _t.logWorkflowDnsError(sanitizedHost, '$e'),
           isError: true,
         );
       }
@@ -353,14 +364,13 @@ class ConnectionWorkflowService {
       if (hostPing != null) {
         yield WorkflowState(
             step: ConnectionStep.preLaunch,
-            logMessage: 'Host RDP $sanitizedHost responde en ${hostPing}ms.');
+            logMessage: _t.logWorkflowIcmpOk(sanitizedHost, hostPing));
       } else {
         final probeError = networkDiagnostics.lastProbeError;
         yield WorkflowState(
           step: ConnectionStep.preLaunch,
-          logMessage:
-              'El host RDP no respondió a ICMP. Si el servidor bloquea ping, se intentará abrir RDP de todos modos.'
-              '${probeError == null ? '' : ' Causa: $probeError.'}',
+          logMessage: '${_t.logWorkflowIcmpFailed}'
+              '${probeError == null ? '' : ' ${_t.logCauseLabel(probeError)}'}',
           isError: true,
         );
       }
@@ -370,31 +380,25 @@ class ConnectionWorkflowService {
       if (tcpConnectTime == null) {
         final probeError = networkDiagnostics.lastProbeError;
         throw RdpTimeoutException(
-          'No se pudo abrir el puerto TCP $sanitizedPort en $sanitizedHost. Revisa rutas, firewall o disponibilidad del servidor RDP.'
-          '${probeError == null ? '' : ' Causa: $probeError.'}',
+          '${_t.errorTcpUnreachable(sanitizedPort, sanitizedHost)}'
+          '${probeError == null ? '' : ' ${_t.logCauseLabel(probeError)}'}',
         );
       }
       yield WorkflowState(
           step: ConnectionStep.preLaunch,
-          logMessage:
-              'Puerto TCP $sanitizedPort accesible en ${tcpConnectTime}ms.');
+          logMessage: _t.logWorkflowTcpOpen(sanitizedPort, tcpConnectTime));
 
-      yield const WorkflowState(
-          step: ConnectionStep.launchRdp,
-          logMessage: 'Paso 4/4 — Lanzando conexión RDP');
+      yield WorkflowState(
+          step: ConnectionStep.launchRdp, logMessage: _t.logWorkflowStepLaunch);
 
       final available = await rdpLauncher.isRdpClientAvailable();
       if (!available) {
-        throw const RdpLaunchException(
-          'No hay un cliente RDP instalado. Instala o habilita Microsoft Remote Desktop Connection.',
-        );
+        throw RdpLaunchException(_t.errorRdpClientMissing);
       }
 
       final ready = await rdpLauncher.preLaunch();
       if (!ready) {
-        throw const RdpLaunchException(
-          'No se encontró un manejador para rdp://. Instala o configura un cliente RDP compatible.',
-        );
+        throw RdpLaunchException(_t.errorRdpHandlerMissing);
       }
 
       final launchResult = await rdpLauncher.launchRdp(
@@ -412,9 +416,9 @@ class ConnectionWorkflowService {
           isFinished: true);
     } catch (e) {
       if (splitTunnelEnabledThisAttempt || splitTunnelSetupAttempted) {
-        yield const WorkflowState(
+        yield WorkflowState(
           step: ConnectionStep.error,
-          logMessage: 'Re-deshabilitando túnel dividido debido a error...',
+          logMessage: _t.logWorkflowRollbackStart,
         );
         try {
           await routeManager.disableSplitTunnel();
@@ -425,14 +429,14 @@ class ConnectionWorkflowService {
               // El rollback de red ya se completó; el registro es secundario.
             }
           }
-          yield const WorkflowState(
+          yield WorkflowState(
             step: ConnectionStep.error,
-            logMessage: 'Túnel dividido deshabilitado correctamente.',
+            logMessage: _t.logWorkflowRollbackDone,
           );
         } catch (disableError) {
           yield WorkflowState(
             step: ConnectionStep.error,
-            logMessage: 'No se pudo deshabilitar el túnel: $disableError',
+            logMessage: _t.logWorkflowRollbackError('$disableError'),
             isError: true,
           );
         }
@@ -444,7 +448,7 @@ class ConnectionWorkflowService {
       }
       yield WorkflowState(
           step: ConnectionStep.error,
-          logMessage: 'Error: $errorMsg',
+          logMessage: _t.logWorkflowError(errorMsg),
           isError: true,
           isFinished: true,
           errorType: e is MedLinkException ? e.type : MedLinkErrorType.unknown);

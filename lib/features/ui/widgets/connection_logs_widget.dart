@@ -40,15 +40,19 @@ class ConnectionLogsWidget extends StatelessWidget {
             Container(
               height: 200,
               decoration: BoxDecoration(
-                color: Colors.black.withAlpha(76),
+                color: const Color(0xF20A1220),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withAlpha(25)),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.18),
+                ),
               ),
               child: logs.isEmpty
                   ? Center(
                       child: Text(
                         l10n.noRecentActivity,
-                        style: Theme.of(context).textTheme.bodySmall,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFFC3D0D9),
+                            ),
                       ),
                     )
                   : ListView.builder(
@@ -67,8 +71,8 @@ class ConnectionLogsWidget extends StatelessWidget {
                                 entry.formatted,
                                 style: TextStyle(
                                   color: entry.isError
-                                      ? Colors.redAccent
-                                      : Colors.greenAccent,
+                                      ? const Color(0xFFFF9AA7)
+                                      : const Color(0xFF7BF1B6),
                                   fontFamily: 'monospace',
                                   fontSize: 12,
                                 ),

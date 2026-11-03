@@ -65,9 +65,12 @@ En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o W
 Los instaladores oficiales se publican en
 [GitHub Releases](https://github.com/Nagamot-Byt/HAPPYCONNECTION/releases/latest):
 
-- **Windows**: `MedLinkConnect-Setup.exe` (instalador 1 clic) o
+- **Windows**: `dist/Windows/MedLinkConnect-Setup.exe` (instalador 1 clic) o
   `MedLinkConnect_Windows_Portable.zip`.
-- **Linux**: `MedLinkConnect_Linux_x64.run` (doble clic), `.deb` o `.tar.gz`.
+- **Linux**: `dist/Linux/MedLinkConnect_Linux_x64.run` (doble clic), `.deb` o
+  `.tar.gz`.
+- **macOS**: `dist/macOS/MedLinkConnect-macOS-Installer.command` (doble clic),
+  `MedLinkConnect_macOS_Installer.zip` o `MedLinkConnect_macOS_Portable.zip`.
 
 ## Instalación
 
@@ -76,14 +79,20 @@ Los instaladores oficiales se publican en
 ```bash
 ./scripts/build_linux.sh
 ./dist/Linux/MedLinkConnect_Linux_x64.run   # instalador 1 clic
-# o: sudo apt install ./dist/Linux/medlink-connect_0.1.0_amd64.deb
+# o: sudo apt install ./dist/Linux/medlink-connect_*_amd64.deb
 ```
 
 ### Windows
 
-Doble clic en `scripts\build_windows.bat` o descarga el instalador desde
-GitHub Releases. El instalador crea accesos directos normales y de
-administrador en el escritorio y el menú de inicio.
+Doble clic en `scripts\build_windows.bat` o usa
+`dist/Windows/MedLinkConnect-Setup.exe`. El instalador crea accesos directos
+normales y de administrador en el escritorio y el menú de inicio.
+
+### macOS
+
+Doble clic en `dist/macOS/MedLinkConnect-macOS-Installer.command`. El instalador
+copia la aplicación a `/Applications`, elimina la cuarentena y la abre. También
+puedes usar `MedLinkConnect_macOS_Installer.zip` o la versión portable.
 
 ## Compilación en 1 clic
 
@@ -94,6 +103,7 @@ artefactos listos en `dist/`:
 |---|---|---|
 | Windows | `scripts\build_windows.bat` | bundle, ZIP portable, instalador Inno Setup |
 | Linux | `./scripts/build_linux.sh` | `.run` autoejecutable, `.tar.gz`, `.deb` |
+| macOS | `flutter build macos --release` + empaquetado | `.app`, instalador `.command`, ZIP portable |
 | Android | `./scripts/build_android.sh` o `scripts\build_android.bat` | `.apk`, `.aab` |
 | iOS (macOS) | `./scripts/build_ios.sh [--simulator\|--ipa]` | `.app.zip` o `.ipa` |
 | Mobile | `./scripts/build_mobile.sh` | Android + iOS si el host es macOS |

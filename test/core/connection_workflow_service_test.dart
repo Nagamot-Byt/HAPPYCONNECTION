@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations_en.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations_es.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:medlink_connect/core/connection_workflow_service.dart';
@@ -37,7 +39,24 @@ void main() {
       mockNetworkDiagnostics,
       mockRdpLauncher,
       wifiManager: mockWifiManager,
-    );
+    )..configureLocalizations(AppLocalizationsEs());
+  });
+
+  test('workflow logs follow the configured locale', () async {
+    workflowService.configureLocalizations(AppLocalizationsEn());
+
+    final state = await workflowService.connect(
+      subnets: const [],
+      host: '',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '',
+      iface: '',
+      resolvedPort: 3389,
+    ).first;
+
+    expect(state.logMessage, 'Starting full connection flow…');
   });
 
   test('Happy path connection flow emits expected steps', () async {

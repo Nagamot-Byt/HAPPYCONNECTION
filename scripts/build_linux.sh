@@ -80,6 +80,22 @@ tar -C "$STAGE_DIR" -czf "$PAYLOAD" \
 # Instalador autoejecutable de MedLink Connect para Linux.
 set -eu
 SELF="$0"
+if command -v readlink >/dev/null 2>&1; then
+  SELF="$(readlink -f -- "$0" 2>/dev/null || true)"
+fi
+if [ -z "${SELF:-}" ] || [ ! -f "$SELF" ]; then
+  SELF="$0"
+  case "$SELF" in
+    /*) ;;
+    *) SELF="$PWD/$SELF" ;;
+  esac
+fi
+if [ ! -f "$SELF" ]; then
+  echo "No se encontró el archivo del instalador: $0" >&2
+  exit 1
+fi
+SELF_DIR="$(cd "$(dirname "$SELF")" && pwd)"
+cd "$SELF_DIR"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT INT TERM
 LINE="$(awk '/^__MEDLINK_PAYLOAD__$/ {print NR + 1; exit}' "$SELF")"
@@ -122,11 +138,13 @@ EOF
 Version=1.0
 Name=MedLink Connect
 Comment=Conexión RDP y Wi-Fi para redes hospitalarias
-Exec=medlink-connect
+Exec=/usr/bin/medlink-connect
+TryExec=/usr/bin/medlink-connect
 Icon=medlink-connect
 Terminal=false
 Type=Application
 Categories=Network;Utility;
+StartupWMClass=medlink_connect
 EOF
   cat > "$DEB_ROOT/DEBIAN/control" <<EOF
 Package: medlink-connect

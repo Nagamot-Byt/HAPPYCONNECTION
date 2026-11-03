@@ -194,11 +194,19 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
       for (final ssid in options)
         DropdownMenuItem<String>(
           value: ssid,
-          child: Text(ssid),
+          child: Text(
+            ssid,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       DropdownMenuItem<String>(
         value: controller.manualWifiOption,
-        child: Text(l10n.otherNetwork),
+        child: Text(
+          l10n.otherNetwork,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ),
     ];
 
@@ -218,6 +226,9 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
         DropdownButtonFormField<String>(
           value: value,
           isExpanded: true,
+          menuMaxHeight: 320,
+          borderRadius: BorderRadius.circular(12),
+          dropdownColor: Theme.of(context).colorScheme.surface,
           decoration: InputDecoration(
             labelText: l10n.wifiNetworkLabel,
             border: const OutlineInputBorder(),

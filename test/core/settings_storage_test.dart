@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -20,15 +21,18 @@ void main() {
     expect(settings.rdpPort, 3389);
     expect(settings.rdpProfile, 'adaptive');
     expect(settings.preferMostStableServer, isTrue);
+    expect(settings.themeMode, ThemeMode.system);
 
     settings.gateway = '192.168.1.1';
     settings.preferMostStableServer = false;
+    settings.themeMode = ThemeMode.dark;
     settings.rdpUsername = 'medico1';
     settings.rdpDomain = 'HUV';
     await settings.save();
 
     expect(settings.gateway, '192.168.1.1');
     expect(settings.preferMostStableServer, isFalse);
+    expect(settings.themeMode, ThemeMode.dark);
     expect(settings.rdpUsername, 'medico1');
     expect(settings.rdpDomain, 'HUV');
 

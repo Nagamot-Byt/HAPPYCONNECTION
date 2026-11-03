@@ -19,13 +19,13 @@ class GlassContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final defaultColor = isDark
-        ? Colors.black.withValues(alpha: 0.25)
-        : Colors.white.withValues(alpha: 0.15);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final defaultColor =
+        theme.colorScheme.surface.withValues(alpha: isDark ? 0.82 : 0.78);
     final defaultBorderColor = isDark
-        ? Colors.white.withValues(alpha: 0.15)
-        : Colors.white.withValues(alpha: 0.3);
+        ? Colors.white.withValues(alpha: 0.22)
+        : Colors.black.withValues(alpha: 0.1);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
@@ -40,7 +40,7 @@ class GlassContainer extends StatelessWidget {
                 color: borderColor ?? defaultBorderColor, width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.1),
+                color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.1),
                 blurRadius: 10,
                 spreadRadius: 1,
               ),

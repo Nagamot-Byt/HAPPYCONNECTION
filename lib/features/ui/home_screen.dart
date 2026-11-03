@@ -16,6 +16,7 @@ import 'package:medlink_connect/core/wifi_manager.dart';
 import 'package:medlink_connect/core/settings_storage.dart';
 import 'package:medlink_connect/core/connection_workflow_service.dart';
 import 'package:medlink_connect/core/injection.dart';
+import 'package:medlink_connect/core/theme_controller.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -47,11 +48,12 @@ class _HomeScreenContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = context.watch<HomeController>();
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
 
     final stepColor = switch (controller.step) {
-      ConnectionStep.done => Colors.green,
-      ConnectionStep.error => Colors.red,
-      _ => Theme.of(context).colorScheme.primary,
+      ConnectionStep.done => AppTheme.successColor(theme.brightness),
+      ConnectionStep.error => theme.colorScheme.error,
+      _ => theme.colorScheme.primary,
     };
 
     final stepText = switch (controller.step) {
@@ -75,6 +77,7 @@ class _HomeScreenContent extends StatelessWidget {
         appBar: AppBar(
           title: Text(l10n.appTitle),
           actions: [
+            const _ThemeModeMenu(),
             IconButton(
               tooltip: l10n.resetSettingsTitle,
               onPressed: controller.busy || controller.settings == null
@@ -101,6 +104,7 @@ class _HomeScreenContent extends StatelessWidget {
                       );
                       if (confirmed == true) {
                         await controller.resetSettings();
+                        getIt<ThemeController>().setMode(ThemeMode.system);
                       }
                     },
               icon: const Icon(Icons.restore_outlined),
@@ -223,6 +227,77 @@ class _HomeScreenContent extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ThemeModeMenu extends StatelessWidget {
+  const _ThemeModeMenu();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = getIt<ThemeController>();
+
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final mode = controller.mode;
+        return PopupMenuButton<ThemeMode>(
+          key: const ValueKey('theme-menu'),
+          tooltip: l10n.themeModeTitle,
+          initialValue: mode,
+          onSelected: controller.setMode,
+          icon: Icon(
+            switch (mode) {
+              ThemeMode.light => Icons.light_mode_outlined,
+              ThemeMode.dark => Icons.dark_mode_outlined,
+              ThemeMode.system => Icons.brightness_auto_outlined,
+            },
+          ),
+          itemBuilder: (context) => [
+            _themeItem(
+              value: ThemeMode.system,
+              current: mode,
+              icon: Icons.brightness_auto_outlined,
+              label: l10n.themeSystem,
+            ),
+            _themeItem(
+              value: ThemeMode.light,
+              current: mode,
+              icon: Icons.light_mode_outlined,
+              label: l10n.themeLight,
+            ),
+            _themeItem(
+              value: ThemeMode.dark,
+              current: mode,
+              icon: Icons.dark_mode_outlined,
+              label: l10n.themeDark,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  PopupMenuItem<ThemeMode> _themeItem({
+    required ThemeMode value,
+    required ThemeMode current,
+    required IconData icon,
+    required String label,
+  }) {
+    final selected = value == current;
+    return PopupMenuItem<ThemeMode>(
+      key: ValueKey('theme-${value.name}'),
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 12),
+          Expanded(child: Text(label)),
+          if (selected) const Icon(Icons.check, size: 20),
+        ],
       ),
     );
   }

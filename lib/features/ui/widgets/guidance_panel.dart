@@ -13,12 +13,20 @@ class GuidancePanel extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final scheme = theme.colorScheme;
+    final containerColor = controller.guidanceIsError
+        ? scheme.errorContainer
+        : scheme.primaryContainer;
+    final iconColor =
+        controller.guidanceIsError ? scheme.error : scheme.primary;
+
     return Padding(
       padding: const EdgeInsets.only(top: 16.0),
       child: GlassContainer(
-        color: controller.guidanceIsError
-            ? Colors.red.withValues(alpha: 0.15)
-            : Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+        color: containerColor.withValues(alpha: isDark ? 0.45 : 0.65),
+        borderColor: containerColor.withValues(alpha: isDark ? 0.6 : 0.8),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
@@ -28,9 +36,7 @@ class GuidancePanel extends StatelessWidget {
                 controller.guidanceIsError
                     ? Icons.warning_amber_rounded
                     : Icons.tips_and_updates_outlined,
-                color: controller.guidanceIsError
-                    ? Colors.red
-                    : Theme.of(context).colorScheme.primary,
+                color: iconColor,
               ),
               const SizedBox(width: 12),
               Expanded(

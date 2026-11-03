@@ -32,12 +32,12 @@ class ConnectionActionButtons extends StatelessWidget {
           onPressed:
               controller.busy || !controller.loaded ? null : controller.connect,
           icon: controller.busy
-              ? const SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onPrimary,
                   ),
                 )
               : const Icon(Icons.play_arrow),

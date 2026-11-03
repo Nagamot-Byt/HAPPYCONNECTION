@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:medlink_connect/core/app_theme.dart';
 import 'package:medlink_connect/features/ui/home_controller.dart';
 
 class ConnectionStepIndicator extends StatelessWidget {
@@ -16,6 +17,8 @@ class ConnectionStepIndicator extends StatelessWidget {
       ConnectionStep.launchRdp,
     ];
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final successColor = AppTheme.successColor(theme.brightness);
     final labels = [
       l10n.stepPrepare,
       l10n.stepTunnel,
@@ -44,25 +47,25 @@ class ConnectionStepIndicator extends StatelessWidget {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(4),
                         color: done
-                            ? Colors.green
+                            ? successColor
                             : active
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context).colorScheme.outlineVariant,
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.outlineVariant,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       labels[i],
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: active || done
-                                ? Theme.of(context).colorScheme.onPrimary
-                                : Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                            fontWeight:
-                                active ? FontWeight.bold : FontWeight.normal,
-                          ),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: done
+                            ? successColor
+                            : active
+                                ? theme.colorScheme.onSurface
+                                : theme.colorScheme.onSurfaceVariant,
+                        fontWeight:
+                            active ? FontWeight.bold : FontWeight.normal,
+                      ),
                     ),
                   ],
                 ),

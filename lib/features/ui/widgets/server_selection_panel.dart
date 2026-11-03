@@ -30,6 +30,9 @@ class ServerSelectionPanel extends StatelessWidget {
             DropdownButtonFormField<String>(
               value: controller.selectedServerPresetId,
               isExpanded: true,
+              menuMaxHeight: 320,
+              borderRadius: BorderRadius.circular(12),
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: InputDecoration(
                 labelText: l10n.serverPresetLabel,
                 border: const OutlineInputBorder(),
@@ -38,7 +41,11 @@ class ServerSelectionPanel extends StatelessWidget {
               items: [
                 DropdownMenuItem(
                   value: 'manual',
-                  child: Text(l10n.manual),
+                  child: Text(
+                    l10n.manual,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 for (final preset in presets)
                   DropdownMenuItem(
@@ -47,6 +54,7 @@ class ServerSelectionPanel extends StatelessWidget {
                       preset.isConfigured
                           ? '${preset.label} - ${preset.host}:${preset.port}'
                           : l10n.presetPending(preset.label),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -178,6 +186,10 @@ class ServerSelectionPanel extends StatelessWidget {
             ),
             DropdownButtonFormField<String>(
               value: controller.rdpProfile,
+              isExpanded: true,
+              menuMaxHeight: 240,
+              borderRadius: BorderRadius.circular(12),
+              dropdownColor: Theme.of(context).colorScheme.surface,
               decoration: InputDecoration(
                 labelText: l10n.rdpProfile,
                 border: const OutlineInputBorder(),
@@ -186,15 +198,27 @@ class ServerSelectionPanel extends StatelessWidget {
               items: [
                 DropdownMenuItem(
                   value: 'adaptive',
-                  child: Text(l10n.profileAdaptive),
+                  child: Text(
+                    l10n.profileAdaptive,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 DropdownMenuItem(
                   value: 'stable',
-                  child: Text(l10n.profileStable),
+                  child: Text(
+                    l10n.profileStable,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 DropdownMenuItem(
                   value: 'speed',
-                  child: Text(l10n.profileSpeed),
+                  child: Text(
+                    l10n.profileSpeed,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
               onChanged: controller.busy

@@ -8,6 +8,8 @@ INSTALACIÓN EN 1 CLIC:
 2. El instalador copia la aplicación a Archivos de programa y crea accesos
    directos normales y de administrador en el Escritorio y el Menú Inicio.
 3. Abre "MedLink Connect" desde tu Escritorio o Menú Inicio.
+4. Si SmartScreen muestra una advertencia, elige "Más información" >
+   "Ejecutar de todas formas". El instalador no está firmado digitalmente.
 
 VERSIÓN PORTABLE:
 

@@ -2,6 +2,8 @@ import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:injectable/injectable.dart';
 import 'injection.config.dart';
+import 'settings_storage.dart';
+import 'theme_controller.dart';
 
 final getIt = GetIt.instance;
 
@@ -10,7 +12,14 @@ final getIt = GetIt.instance;
   preferRelativeImports: true,
   asExtension: true,
 )
-Future<void> configureDependencies() => getIt.init();
+Future<void> configureDependencies() async {
+  await getIt.init();
+  if (!getIt.isRegistered<ThemeController>()) {
+    getIt.registerLazySingleton<ThemeController>(
+      () => ThemeController(getIt<SettingsStorage>()),
+    );
+  }
+}
 
 @module
 abstract class AppModule {

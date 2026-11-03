@@ -334,6 +334,159 @@ void main() {
       expect(controller.splitTunnelActive, isTrue);
     });
 
+    test('runDiagnostics rejects an invalid host before native probes',
+        () async {
+      controller.rdpHostCtrl.text = 'host con espacios';
+      when(() => mockNetworkDiagnostics.flushDns())
+          .thenAnswer((_) async => 'DNS Flushed');
+      when(() => mockNetworkDiagnostics.clearNetworkCaches())
+          .thenAnswer((_) async => 'Caches Cleared');
+
+      await controller.runDiagnostics();
+
+      verifyNever(() => mockNetworkDiagnostics.ping(any()));
+      expect(
+        controller.logs.any((line) => line.contains('Configuración inválida')),
+        isTrue,
+      );
+    });
+
+    test('refreshWifiNetworks deduplicates and sorts SSIDs', () async {
+      when(() => mockWifiManager.scanNetworks())
+          .thenAnswer((_) async => ['Hospital', 'Anemia', 'Hospital']);
+
+      await controller.refreshWifiNetworks(silent: true);
+
+      expect(controller.wifiNetworks, ['Anemia', 'Hospital']);
+    });
+
+    test('saveSettings can clear a previously stored Wi-Fi SSID', () async {
+      await controller.saveSettings();
+
+      verify(() => mockSettingsStorage.wifiSsid = '').called(1);
+    });
+
+    test('troubleshooter refreshes gateway and interface after Wi-Fi sync',
+        () async {
+      controller.subnetsCtrl.text = '10.0.0.0/8';
+      controller.rdpHostCtrl.text = '10.0.0.50';
+      controller.preferMostStableServer = false;
+      when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
+        (_) async => const WifiConnectionInfo(
+          ssid: 'HUV_WIFI',
+          interfaceName: 'eth0',
+          gateway: '192.168.1.1',
+        ),
+      );
+      when(() => mockRouteManager.verifyRoutes(
+            hospitalSubnets: ['10.0.0.0/8'],
+            gateway: '192.168.1.1',
+            interfaceName: 'eth0',
+          )).thenAnswer((_) async => const <String>[]);
+      when(() => mockRdpLauncher.isRdpClientAvailable())
+          .thenAnswer((_) async => true);
+      when(() => mockNetworkDiagnostics.ping('10.0.0.50'))
+          .thenAnswer((_) async => 5);
+      when(() => mockNetworkDiagnostics.checkTcpPort('10.0.0.50', 3389))
+          .thenAnswer((_) async => 10);
+
+      await controller.runConnectionTroubleshooter();
+
+      verify(() => mockRouteManager.verifyRoutes(
+            hospitalSubnets: ['10.0.0.0/8'],
+            gateway: '192.168.1.1',
+            interfaceName: 'eth0',
+          )).called(1);
+    });
+
+    test('a failed rollback keeps the split tunnel marked as active', () async {
+      controller.rdpHostCtrl.text = '192.168.1.100';
+      controller.subnetsCtrl.text = '10.0.0.0/8';
+      controller.gatewayCtrl.text = '192.168.1.1';
+      controller.ifaceCtrl.text = 'Wi-Fi';
+
+      when(() => mockSettingsStorage.setPendingSplitTunnelCleanup(
+            subnets: any(named: 'subnets'),
+            gateway: any(named: 'gateway'),
+            interfaceName: any(named: 'interfaceName'),
+          )).thenAnswer((_) async {});
+      when(() => mockWorkflowService.connect(
+            subnets: ['10.0.0.0/8'],
+            host: '192.168.1.100',
+            user: '',
+            domain: '',
+            selectedWifi: '',
+            gateway: '192.168.1.1',
+            iface: 'Wi-Fi',
+            resolvedPort: 3389,
+            rdpProfile: 'adaptive',
+            wifiPassword: '',
+            onSelectServer: any(named: 'onSelectServer'),
+            onSplitTunnelEnabled: any(named: 'onSplitTunnelEnabled'),
+            onSplitTunnelRolledBack: any(named: 'onSplitTunnelRolledBack'),
+            onSplitTunnelUnavailable: any(named: 'onSplitTunnelUnavailable'),
+          )).thenAnswer((invocation) {
+        final onEnabled = invocation.namedArguments[#onSplitTunnelEnabled]
+            as Future<void> Function(List<String>, String, String)?;
+        return () async* {
+          yield const WorkflowState(
+            step: ConnectionStep.splitTunnel,
+            logMessage: 'Preparando túnel',
+          );
+          await onEnabled?.call(['10.0.0.0/8'], '192.168.1.1', 'Wi-Fi');
+          yield const WorkflowState(
+            step: ConnectionStep.error,
+            logMessage: 'No se pudo deshabilitar el túnel',
+            isError: true,
+            isFinished: true,
+            errorType: MedLinkErrorType.route,
+          );
+        }();
+      });
+
+      await controller.connect();
+
+      expect(controller.splitTunnelActive, isTrue);
+    });
+
+    test('reset is aborted when stale routes cannot be removed', () async {
+      when(() => mockSettingsStorage.pendingSplitTunnelCleanup).thenReturn(
+        const PendingSplitTunnelCleanup(
+          subnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        ),
+      );
+      when(() => mockRouteManager.removeRoute(
+            destinationCidr: '10.0.0.0/8',
+            gateway: '192.168.1.1',
+            interfaceName: 'Wi-Fi',
+          )).thenThrow(
+        const RouteConfigurationException('sin permisos'),
+      );
+      when(() => mockSettingsStorage.clear()).thenAnswer((_) async {});
+
+      await controller.resetSettings();
+
+      verifyNever(() => mockSettingsStorage.clear());
+      expect(controller.guidanceTitle, 'Problema con rutas/gateway');
+    });
+
+    test('diagnoseBestServerPreset ignores unconfigured presets', () async {
+      controller.serverPresets = const [
+        ServerPreset(
+          id: 'pending',
+          label: 'Pendiente',
+          host: 'pendiente',
+          port: 3389,
+        ),
+      ];
+
+      final best = await controller.diagnoseBestServerPreset();
+
+      expect(best, isNull);
+    });
+
     test('log keeps only the most recent entries', () {
       for (var i = 0; i < 600; i++) {
         controller.log('line $i');

@@ -1,96 +1,70 @@
-# MedLink Connect — compilación y empaquetado en 1 clic
+# MedLink Connect — instaladores de escritorio
 
-Los scripts de `scripts/` detectan Flutter, compilan y dejan artefactos listos
-para usar en `dist/`. Los binarios generados no se versionan.
+Versión `0.1.0`. Artefactos generados desde el commit `4ce6ac2`.
 
-El workflow `.github/workflows/build-desktop.yml` compila Linux y Windows en CI
-y publica los artefactos en GitHub Releases al crear un tag `v*`.
+Cada plataforma tiene su propia carpeta con un instalador de un solo clic y un
+README específico.
 
-## Auditoría rápida
+## Linux — `dist/Linux/`
 
-```bash
-./scripts/audit.sh              # pub get + analyze + test
-./scripts/audit.sh --build-linux
-```
+| Archivo | Uso |
+| --- | --- |
+| `MedLinkConnect_Linux_x64.run` | Instalador de un solo clic. Doble clic, sin `sudo`. |
+| `medlink-connect_0.1.0_amd64.deb` | Instalación para Debian/Ubuntu: `sudo apt install ./medlink-connect_*_amd64.deb`. |
+| `MedLinkConnect_Linux_x64.tar.gz` | Versión portable: extraer y ejecutar `instalar_medlink_connect.sh`. |
+| `README_LINUX.txt` | Instrucciones y solución de problemas. |
 
-En Windows: doble clic en `scripts\audit.bat`.
-
-## Windows
-
-Doble clic en `scripts\build_windows.bat` (o ejecútalo desde `cmd`).
-
-Genera en `dist\Windows\`:
-
-- `bundle\` — aplicación compilada (`medlink_connect.exe`).
-- `MedLinkConnect_Windows_Portable.zip` — paquete portable.
-- `MedLinkConnect-Setup.exe` — instalador Inno Setup (si Inno Setup 6 está instalado).
-- `instalar_medlink_connect.bat` — instalador 1 clic sin privilegios de sistema.
-- `medlink_connect_admin.bat` — lanzador que solicita elevación (UAC).
-
-Requisitos: Flutter con soporte Windows y Visual Studio C++ (Desktop development
-with C++). Para el instalador `.exe`, Inno Setup 6.
-
-## Linux
+Si el `.run` se descargó por navegador y no se abre:
 
 ```bash
-./scripts/build_linux.sh
+chmod +x MedLinkConnect_Linux_x64.run
+./MedLinkConnect_Linux_x64.run
 ```
 
-Genera en `dist/Linux/`:
+No lo ejecutes con `sudo` ni como root. El instalador copia la aplicación a
+`~/.local/share/medlink_connect` y crea los accesos del menú y del escritorio.
 
-- `MedLinkConnect_Linux_<arch>.run` — instalador autoejecutable (doble clic).
-- `MedLinkConnect_Linux_<arch>.tar.gz` — paquete portable.
-- `medlink-connect_<version>_<arch>.deb` — paquete Debian/Ubuntu (si `dpkg-deb` existe).
+## Windows — `dist/Windows/`
 
-Requisitos: Flutter con toolchain Linux (`clang`, `cmake`, `ninja`, `pkg-config`,
-`libgtk-3-dev`, `libsecret-1-dev`).
+| Archivo | Uso |
+| --- | --- |
+| `MedLinkConnect-Setup.exe` | Instalador de un solo clic (Inno Setup). |
+| `MedLinkConnect_Windows_Portable.zip` | Versión portable con instalador `.bat` sin privilegios. |
+| `README_WINDOWS.txt` | Instrucciones, modo administrador y requisitos. |
 
-## Android (mobile)
+Doble clic en `MedLinkConnect-Setup.exe`. Si SmartScreen muestra una advertencia,
+elige “Más información” > “Ejecutar de todas formas”. El instalador es unsigned.
+
+## macOS — `dist/macOS/`
+
+| Archivo | Uso |
+| --- | --- |
+| `MedLinkConnect-macOS-Installer.command` | Instalador de un solo clic. Instala en `/Applications` y abre la app. |
+| `MedLinkConnect_macOS_Installer.zip` | El mismo instalador comprimido, conservando el permiso de ejecución. |
+| `MedLinkConnect_macOS_Portable.zip` | Aplicación `.app` universal para arrastrar a `/Applications`. |
+| `README_MACOS.txt` | Instrucciones y advertencias de Gatekeeper. |
+
+Usa el ZIP del instalador si el archivo `.command` perdió el permiso de
+ejecución al transferirse. La aplicación soporta Intel (x86_64) y Apple Silicon
+(arm64), requiere macOS 10.14 o posterior y no está notarizada por Apple.
+
+## Integridad
+
+`SHA256SUMS.txt` contiene los hashes de los instaladores principales. Verifica
+con:
 
 ```bash
-./scripts/build_android.sh
+sha256sum -c SHA256SUMS.txt
 ```
 
-En Windows: doble clic en `scripts\build_android.bat`.
+En macOS: `shasum -a 256 -c SHA256SUMS.txt`.
 
-Genera en `dist/Android/`:
+## Recompilar
 
-- `MedLinkConnect_<version>.apk` — instalar copiando al teléfono y abriéndolo.
-- `MedLinkConnect_<version>.aab` — para Google Play.
+- Linux: `./scripts/build_linux.sh`
+- Windows: `scripts\build_windows.bat` en Windows con Flutter, Visual Studio C++
+  e Inno Setup 6.
+- macOS: `flutter build macos --release` en macOS y empaquetar el `.app`.
 
-Requisitos: Flutter + Android SDK + Java. La configuración actual firma release
-con la clave de debug; para distribución real configura un keystore en
-`android/key.properties`.
-
-## iOS (mobile, solo macOS)
-
-```bash
-./scripts/build_ios.sh              # app sin firma
-./scripts/build_ios.sh --simulator  # app para simulador
-./scripts/build_ios.sh --ipa        # IPA firmada (requiere equipo/certificados)
-```
-
-Genera en `dist/iOS/` el `.zip` de la app o el `.ipa` firmado.
-
-Requisitos: macOS con Xcode y CocoaPods.
-
-## Mobile (ambas)
-
-```bash
-./scripts/build_mobile.sh
-```
-
-Compila Android y, si el host es macOS, también iOS.
-
-## Notas operativas
-
-- Windows: el túnel dividido requiere permisos de Administrador; usa el acceso
-  directo “(Administrador)” o `medlink_connect_admin.bat`.
-- Linux: las rutas requieren `sudo`/polkit; la app lo solicita cuando hace falta.
-- macOS: el split tunnel requiere un helper privilegiado y no está disponible en
-  esta compilación; la app continúa sobre las rutas del sistema.
-- La suite automatizada se ejecuta con `flutter test` (75 pruebas).
-- Las pruebas de integración nativas se ejecutan con
-  `flutter test integration_test/app_integration_test.dart -d linux` (o la
-  plataforma correspondiente). Las pruebas reales de red son opt-in mediante
-  `--dart-define` y no forman parte del CI por defecto.
+El workflow `.github/workflows/build-desktop.yml` compila Linux y Windows en CI.
+El workflow `.github/workflows/build-apple.yml` compila macOS en un runner Apple.

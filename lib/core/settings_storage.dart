@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:injectable/injectable.dart';
@@ -84,6 +85,16 @@ class SettingsStorage {
       prefs.getString('selectedServerPresetId') ?? 'manual';
   set selectedServerPresetId(String value) =>
       prefs.setString('selectedServerPresetId', value);
+
+  ThemeMode get themeMode {
+    return switch (prefs.getString('themeMode')) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  }
+
+  set themeMode(ThemeMode value) => prefs.setString('themeMode', value.name);
 
   bool get preferMostStableServer =>
       prefs.getBool('preferMostStableServer') ?? true;

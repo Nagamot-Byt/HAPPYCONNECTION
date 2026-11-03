@@ -1,6 +1,6 @@
 # MedLink Connect — instaladores de escritorio
 
-Versión `0.1.0`. Artefactos generados desde el commit `4ce6ac2`.
+Versión `0.1.0`. Artefactos generados desde el commit `0ba7ec1`.
 
 Cada plataforma tiene su propia carpeta con un instalador de un solo clic y un
 README específico.

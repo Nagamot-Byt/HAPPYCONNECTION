@@ -33,6 +33,6 @@ NOTAS:
 
 - El túnel dividido privilegiado no está disponible en esta compilación de
   macOS; la aplicación continúa usando las rutas del sistema.
-- Artefacto generado a partir del commit 4ce6ac2.
+- Artefacto generado a partir del commit 0ba7ec1.
 
 ========================================================================

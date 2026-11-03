@@ -1,38 +1,29 @@
 ========================================================================
-             MEDLINK CONNECT — PAQUETE DE INSTALACIÓN macOS
+             MEDLINK CONNECT — INSTALADOR macOS
 ========================================================================
 
-INSTALACIÓN EN 1 CLIC:
+INSTALACIÓN:
 
-1. Haz doble clic en "MedLinkConnect-macOS-Installer.command".
-2. El instalador copia "MedLink Connect.app" a /Applications, elimina la
-   cuarentena de macOS y abre la aplicación.
-3. Si macOS muestra una advertencia de seguridad, haz clic derecho sobre el
-   instalador y elige "Abrir". Repite el mismo paso con la aplicación si
-   vuelve a aparecer la advertencia.
-4. Si el sistema indica que el archivo no se puede ejecutar porque se
-   descargó por internet, abre Terminal en esta carpeta y ejecuta:
-     chmod +x MedLinkConnect-macOS-Installer.command
-     ./MedLinkConnect-macOS-Installer.command
+1. Abre "MedLinkConnect_macOS.dmg".
+2. Arrastra "MedLink Connect.app" a la carpeta Aplicaciones.
+3. Expulsa el DMG.
+4. Abre MedLink Connect desde Aplicaciones.
 
-VERSIÓN PORTABLE:
+PRIMERA APERTURA:
 
-- Descomprime "MedLinkConnect_macOS_Portable.zip" y arrastra
-  "MedLink Connect.app" a /Applications.
-- Si macOS bloquea la aplicación, haz clic derecho y elige "Abrir".
+- La aplicación no está notarizada por Apple. Si macOS muestra una advertencia,
+  haz clic derecho sobre "MedLink Connect.app" y elige "Abrir".
+- Si macOS sigue bloqueando la aplicación, abre Ajustes del Sistema >
+  Privacidad y seguridad y permite abrirla.
 
 COMPATIBILIDAD:
 
 - Aplicación universal para Mac con Intel (x86_64) y Apple Silicon (arm64).
 - Requiere macOS 10.14 o posterior.
-- La aplicación no está notarizada por Apple. El instalador aplica una firma
-  local ad-hoc, elimina la cuarentena y abre la app; si Gatekeeper la bloquea,
-  usa clic derecho > "Abrir".
 
 NOTAS:
 
 - El túnel dividido privilegiado no está disponible en esta compilación de
   macOS; la aplicación continúa usando las rutas del sistema.
-- Artefacto generado a partir del commit 0ba7ec1.
 
 ========================================================================

@@ -1,6 +1,6 @@
 # MedLink Connect — instaladores de escritorio
 
-Versión `0.1.0`. Artefactos generados desde el commit `0ba7ec1`.
+Versión `0.1.0`.
 
 Cada plataforma tiene su propia carpeta con un instalador de un solo clic y un
 README específico.
@@ -39,14 +39,12 @@ elige “Más información” > “Ejecutar de todas formas”. El instalador es
 
 | Archivo | Uso |
 | --- | --- |
-| `MedLinkConnect-macOS-Installer.command` | Instalador de un solo clic. Instala en `/Applications` y abre la app. |
-| `MedLinkConnect_macOS_Installer.zip` | El mismo instalador comprimido, conservando el permiso de ejecución. |
-| `MedLinkConnect_macOS_Portable.zip` | Aplicación `.app` universal para arrastrar a `/Applications`. |
+| `MedLinkConnect_macOS.dmg` | Abrir, arrastrar `MedLink Connect.app` a Aplicaciones y abrir. |
 | `README_MACOS.txt` | Instrucciones y advertencias de Gatekeeper. |
 
-Usa el ZIP del instalador si el archivo `.command` perdió el permiso de
-ejecución al transferirse. La aplicación soporta Intel (x86_64) y Apple Silicon
-(arm64), requiere macOS 10.14 o posterior y no está notarizada por Apple.
+La aplicación soporta Intel (x86_64) y Apple Silicon (arm64), requiere macOS
+10.14 o posterior y no está notarizada por Apple. En la primera apertura,
+usa clic derecho > “Abrir” si Gatekeeper muestra una advertencia.
 
 ## Integridad
 
@@ -64,7 +62,7 @@ En macOS: `shasum -a 256 -c SHA256SUMS.txt`.
 - Linux: `./scripts/build_linux.sh`
 - Windows: `scripts\build_windows.bat` en Windows con Flutter, Visual Studio C++
   e Inno Setup 6.
-- macOS: `flutter build macos --release` en macOS y empaquetar el `.app`.
+- macOS: `./scripts/build_macos.sh` en macOS con Flutter y CocoaPods.
 
 El workflow `.github/workflows/build-desktop.yml` compila Linux y Windows en CI.
 El workflow `.github/workflows/build-apple.yml` compila macOS en un runner Apple.

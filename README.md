@@ -69,8 +69,8 @@ Los instaladores oficiales se publican en
   `MedLinkConnect_Windows_Portable.zip`.
 - **Linux**: `dist/Linux/MedLinkConnect_Linux_x64.run` (doble clic), `.deb` o
   `.tar.gz`.
-- **macOS**: `dist/macOS/MedLinkConnect-macOS-Installer.command` (doble clic),
-  `MedLinkConnect_macOS_Installer.zip` o `MedLinkConnect_macOS_Portable.zip`.
+- **macOS**: `dist/macOS/MedLinkConnect_macOS.dmg` (abrir y arrastrar la app a
+  Aplicaciones).
 
 ## Instalación
 
@@ -90,9 +90,9 @@ normales y de administrador en el escritorio y el menú de inicio.
 
 ### macOS
 
-Doble clic en `dist/macOS/MedLinkConnect-macOS-Installer.command`. El instalador
-copia la aplicación a `/Applications`, elimina la cuarentena y la abre. También
-puedes usar `MedLinkConnect_macOS_Installer.zip` o la versión portable.
+Abre `dist/macOS/MedLinkConnect_macOS.dmg`, arrastra `MedLink Connect.app` a
+Aplicaciones y abre la aplicación. Si Gatekeeper la bloquea la primera vez,
+haz clic derecho sobre la app y elige “Abrir”.
 
 ## Compilación en 1 clic
 
@@ -103,7 +103,7 @@ artefactos listos en `dist/`:
 |---|---|---|
 | Windows | `scripts\build_windows.bat` | bundle, ZIP portable, instalador Inno Setup |
 | Linux | `./scripts/build_linux.sh` | `.run` autoejecutable, `.tar.gz`, `.deb` |
-| macOS | `flutter build macos --release` + empaquetado | `.app`, instalador `.command`, ZIP portable |
+| macOS | `./scripts/build_macos.sh` | DMG con la app universal |
 | Android | `./scripts/build_android.sh` o `scripts\build_android.bat` | `.apk`, `.aab` |
 | iOS (macOS) | `./scripts/build_ios.sh [--simulator\|--ipa]` | `.app.zip` o `.ipa` |
 | Mobile | `./scripts/build_mobile.sh` | Android + iOS si el host es macOS |

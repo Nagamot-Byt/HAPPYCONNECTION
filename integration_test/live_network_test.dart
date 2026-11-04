@@ -5,6 +5,7 @@ import 'package:integration_test/integration_test.dart';
 const _rdpHost = String.fromEnvironment('RDP_TEST_HOST');
 const _rdpPort = int.fromEnvironment('RDP_TEST_PORT', defaultValue: 3389);
 const _expectWifi = bool.fromEnvironment('EXPECT_WIFI');
+const _expectWifiConnect = bool.fromEnvironment('EXPECT_WIFI_CONNECT');
 const _routeCidr = String.fromEnvironment('ROUTE_TEST_CIDR');
 const _routeGateway = String.fromEnvironment('ROUTE_TEST_GATEWAY');
 const _routeInterface = String.fromEnvironment('ROUTE_TEST_INTERFACE');
@@ -36,11 +37,51 @@ void main() {
     skip: !_expectWifi,
     (tester) async {
       final info = await wifiChannel.invokeMapMethod<String, dynamic>(
-        'getCurrentConnectionInfo',
+        'getCurrentInfo',
       );
 
       expect(info, isNotNull);
       expect((info?['ssid'] as String?)?.trim(), isNotEmpty);
+      expect((info?['interfaceName'] as String?)?.trim(), isNotEmpty);
+      expect((info?['gateway'] as String?)?.trim(), isNotEmpty);
+    },
+  );
+
+  testWidgets(
+    'live Wi-Fi scan returns visible networks',
+    skip: !_expectWifi,
+    (tester) async {
+      final networks =
+          await wifiChannel.invokeListMethod<String>('scanNetworks');
+
+      expect(networks, isNotNull);
+      expect(networks, isNotEmpty);
+      expect(networks!.every((ssid) => ssid.isNotEmpty), isTrue);
+    },
+  );
+
+  testWidgets(
+    'live Wi-Fi reconnects to the active network',
+    skip: !_expectWifiConnect,
+    (tester) async {
+      final before = await wifiChannel.invokeMapMethod<String, dynamic>(
+        'getCurrentInfo',
+      );
+      final ssid = (before?['ssid'] as String?) ?? '';
+      expect(ssid.trim(), isNotEmpty);
+
+      final message = await wifiChannel.invokeMethod<String>('connect', {
+        'ssid': ssid,
+        'password': '',
+      });
+      expect(message, contains(ssid));
+
+      final after = await wifiChannel.invokeMapMethod<String, dynamic>(
+        'getCurrentInfo',
+      );
+      expect(after?['ssid'], ssid);
+      expect((after?['interfaceName'] as String?)?.trim(), isNotEmpty);
+      expect((after?['gateway'] as String?)?.trim(), isNotEmpty);
     },
   );
 

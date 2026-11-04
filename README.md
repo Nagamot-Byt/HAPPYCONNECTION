@@ -30,12 +30,12 @@ MedLink Connect **NO** implementa un túnel VPN completo (WireGuard/OpenVPN). Ut
 | Plataforma | Estado | Notas |
 |---|---|---|
 | **Windows** | Validado / Principal | Requiere **Ejecutar como Administrador** para modificar rutas estáticas |
-| **Linux** | Compilable / experimental | `flutter build linux --release` verificado. Wi-Fi nativo no implementado; rutas requieren `sudo`/polkit |
+| **Linux** | Compilable / experimental | Wi-Fi vía NetworkManager (`nmcli`); rutas requieren `sudo`/polkit |
 | **macOS** | RDP sobre red existente / split tunnel no soportado | Requiere un helper privilegiado (`SMAppService`) que no forma parte de este release. Guía de compilación en `dist/macOS/` |
 | **Android** | Compilable / experimental | APK y AAB release verificados con `targetSdk 36` (2026-10-30). Wi-Fi nativo no implementado: usar una red ya conectada; las rutas requieren root. RDP se abre con un cliente externo |
 | **iOS** | RDP sobre red existente / split tunnel no soportado | Requiere `NetworkExtension` (`NEPacketTunnelProvider`) y entitlements de Personal VPN, fuera de este release |
 
-En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o WPA3 debe existir un perfil previo en el sistema operativo.
+En Windows la app genera perfiles Wi-Fi WPA2-PSK. En Linux usa NetworkManager (`nmcli`) y requiere que el servicio esté activo y el usuario tenga permiso para gestionar conexiones. Para redes WPA2-Enterprise o WPA3 debe existir un perfil previo en el sistema operativo.
 
 ## Seguridad y limitaciones
 
@@ -44,6 +44,8 @@ En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o W
 - En Windows, la clave Wi-Fi se entrega a la API WLAN del sistema; Windows la
   conserva en el perfil de red administrado por el SO y MedLink Connect no la
   vuelve a leer.
+- En Linux, la clave Wi-Fi se entrega a `nmcli` como argumento de proceso y no
+  se persiste en la configuración de MedLink Connect.
 - El diagnóstico usa como objetivo el host RDP configurado o, si no existe, el
   gateway de la red hospitalaria. No depende de `8.8.8.8` ni de Internet.
 - `lib/mobile_rdp/` y `native/freerdp/` son un PoC aislado que no se importa en
@@ -51,14 +53,21 @@ En Windows la app genera perfiles Wi-Fi WPA2-PSK. Para redes WPA2-Enterprise o W
 - macOS requiere un helper privilegiado para rutas; iOS requiere
   NetworkExtension. Sin ellos, el split tunnel no está soportado en esas
   plataformas.
-- El escaneo y conexión Wi-Fi nativos solo están implementados en Windows. En
-  Linux, macOS, Android e iOS hay que partir de una red ya conectada.
+- El escaneo y conexión Wi-Fi nativos están implementados en Windows y Linux
+  (NetworkManager). En macOS, Android e iOS hay que partir de una red ya
+  conectada.
 
 ## Requisitos (Windows)
 
 - Windows con `mstsc.exe` disponible
 - **Permisos de Administrador** (obligatorio para `route add`/`New-NetRoute`)
 - Conexión a la red Wi-Fi del hospital
+
+## Requisitos (Linux)
+
+- NetworkManager activo con `nmcli` disponible para escanear y conectar Wi-Fi
+- `sudo`/polkit para configurar las rutas del túnel dividido
+- Cliente RDP compatible con `rdp://` (Remmina, FreeRDP o similar)
 
 ## Descargas
 

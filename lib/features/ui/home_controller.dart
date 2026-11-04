@@ -121,6 +121,9 @@ class HomeController extends ChangeNotifier {
   bool _wifiNetworksLoading = false;
   bool get wifiNetworksLoading => _wifiNetworksLoading;
 
+  String? _wifiScanError;
+  String? get wifiScanError => _wifiScanError;
+
   String? _selectedWifiSsid;
   String? get selectedWifiSsid => _selectedWifiSsid;
   set selectedWifiSsid(String? value) {
@@ -335,10 +338,21 @@ class HomeController extends ChangeNotifier {
   }
 
   String resolvedWifiSsid() {
-    if (selectedWifiSsid == _kManualWifiOption) {
-      return manualWifiCtrl.text.trim();
+    final selected = selectedWifiSsid;
+    if (selected == null ||
+        selected.isEmpty ||
+        selected == _kManualWifiOption ||
+        _wifiNetworks.isEmpty) {
+      return manualWifiCtrl.text;
     }
-    return selectedWifiSsid ?? '';
+    return selected;
+  }
+
+  void selectManualWifi() {
+    if (_selectedWifiSsid != _kManualWifiOption) {
+      _selectedWifiSsid = _kManualWifiOption;
+      _notify();
+    }
   }
 
   Future<void> refreshWifiNetworks({bool silent = false}) async {
@@ -353,9 +367,11 @@ class HomeController extends ChangeNotifier {
       final unique = networks.toSet().toList()
         ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
       _wifiNetworks = unique;
+      _wifiScanError = null;
       if (!silent) log(l10n.logNetworksFound(unique.length));
     } catch (e) {
-      if (!silent) log(l10n.logScanWifiError('$e'), isError: true);
+      _wifiScanError = '$e';
+      log(l10n.logScanWifiError('$e'), isError: true);
     } finally {
       _wifiNetworksLoading = false;
       _notify();
@@ -548,7 +564,7 @@ class HomeController extends ChangeNotifier {
       );
       final info = await syncCurrentWifiInfo(silent: true);
       if (info == null) continue;
-      if (info.ssid.trim() != ssid) {
+      if (info.ssid != ssid) {
         stableAttempts = 0;
         continue;
       }
@@ -568,7 +584,7 @@ class HomeController extends ChangeNotifier {
         return info;
       }
     }
-    if (lastMatch != null && lastMatch.ssid.trim() == ssid) {
+    if (lastMatch != null && lastMatch.ssid == ssid) {
       return lastMatch;
     }
     return null;
@@ -1094,7 +1110,8 @@ class HomeController extends ChangeNotifier {
         }
       }
 
-      if (gateway.isEmpty || iface.isEmpty) {
+      final canConnectWifi = selectedWifi.isNotEmpty && wifiManager != null;
+      if ((gateway.isEmpty || iface.isEmpty) && !canConnectWifi) {
         log(l10n.logMissingGatewayInterfaceHint, isError: true);
         setGuidance(
           l10n.guidanceMissingNetworkDataTitle,

@@ -92,10 +92,13 @@ class ConnectionWorkflowService {
       // Validate inputs using InputSanitizer
       final sanitizedSubnets = InputSanitizer.sanitizeSubnets(subnets,
           fieldName: _t.hospitalSubnets);
-      final sanitizedGateway =
-          InputSanitizer.sanitizeIpv4(gateway, fieldName: _t.gateway);
-      final sanitizedIface = InputSanitizer.sanitizeInterfaceName(iface,
-          fieldName: _t.fieldInterface);
+      final sanitizedGateway = gateway.trim().isEmpty
+          ? ''
+          : InputSanitizer.sanitizeIpv4(gateway, fieldName: _t.gateway);
+      final sanitizedIface = iface.trim().isEmpty
+          ? ''
+          : InputSanitizer.sanitizeInterfaceName(iface,
+              fieldName: _t.fieldInterface);
       final sanitizedUser = user.trim().isEmpty
           ? null
           : InputSanitizer.sanitizeRdpCredential(user,
@@ -111,12 +114,12 @@ class ConnectionWorkflowService {
       if (wifiManager != null && selectedWifi.isNotEmpty) {
         try {
           final sanitizedSsid = InputSanitizer.sanitizeSsid(selectedWifi);
-          final targetSsid = sanitizedSsid.trim();
+          final targetSsid = sanitizedSsid;
 
           var alreadyConnected = false;
           try {
             final info = await wifiManager!.getCurrentConnectionInfo();
-            alreadyConnected = info.ssid.trim() == targetSsid;
+            alreadyConnected = info.ssid == targetSsid;
             if (alreadyConnected) {
               final g = info.gateway.trim();
               final inf = info.interfaceName.trim();
@@ -151,7 +154,7 @@ class ConnectionWorkflowService {
               await Future<void>.delayed(const Duration(seconds: 1));
               try {
                 final info = await wifiManager!.getCurrentConnectionInfo();
-                if (info.ssid.trim() != targetSsid) continue;
+                if (info.ssid != targetSsid) continue;
                 final g = info.gateway.trim();
                 final inf = info.interfaceName.trim();
                 if (g.isNotEmpty) currentGateway = g;

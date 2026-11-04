@@ -124,22 +124,22 @@ abstract final class InputSanitizer {
   }
 
   /// Validates and returns a sanitized Wi-Fi SSID.
-  /// SSIDs can contain most printable characters (including `&` or `()`).
+  /// SSIDs can contain most printable characters (including `&` or `()`) and
+  /// may legitimately start or end with spaces, so the value is not trimmed.
   static String sanitizeSsid(String input, {String fieldName = 'SSID'}) {
-    final trimmed = input.trim();
-    if (trimmed.isEmpty) {
+    if (input.trim().isEmpty) {
       throw ArgumentError.value(
-          trimmed, fieldName, 'El campo no puede estar vacío.');
+          input, fieldName, 'El campo no puede estar vacío.');
     }
-    if (_controlChars.hasMatch(trimmed)) {
-      throw ArgumentError.value(trimmed, fieldName,
+    if (_controlChars.hasMatch(input)) {
+      throw ArgumentError.value(input, fieldName,
           'El SSID contiene caracteres de control no permitidos.');
     }
-    if (trimmed.length > 32) {
+    if (input.length > 32) {
       throw ArgumentError.value(
-          trimmed, fieldName, 'El SSID no puede tener más de 32 caracteres.');
+          input, fieldName, 'El SSID no puede tener más de 32 caracteres.');
     }
-    return trimmed;
+    return input;
   }
 
   /// Validates an RDP username or domain. Newlines and control characters

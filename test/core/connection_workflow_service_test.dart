@@ -152,6 +152,66 @@ void main() {
         ));
   });
 
+  test('Wi-Fi connection can start without a gateway or interface', () async {
+    when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
+      (_) async => const WifiConnectionInfo(
+        ssid: '',
+        interfaceName: '',
+        gateway: '',
+      ),
+    );
+    when(() => mockWifiManager.connect(ssid: 'HUV_WIFI', password: null))
+        .thenThrow(const WifiConnectionException('sin credenciales'));
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: 'HUV_WIFI',
+      gateway: '',
+      iface: '',
+      resolvedPort: 3389,
+    ).toList();
+
+    verify(() => mockWifiManager.connect(ssid: 'HUV_WIFI', password: null))
+        .called(1);
+    expect(states.last.step, ConnectionStep.error);
+    expect(states.last.errorType, MedLinkErrorType.wifi);
+    verifyNever(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: any(named: 'hospitalSubnets'),
+          gateway: any(named: 'gateway'),
+          interfaceName: any(named: 'interfaceName'),
+        ));
+  });
+
+  test('SSIDs with trailing spaces are passed through unchanged', () async {
+    when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
+      (_) async => const WifiConnectionInfo(
+        ssid: '',
+        interfaceName: '',
+        gateway: '',
+      ),
+    );
+    when(() => mockWifiManager.connect(ssid: 'SAN FERNANDO ', password: null))
+        .thenThrow(const WifiConnectionException('sin credenciales'));
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: 'SAN FERNANDO ',
+      gateway: '',
+      iface: '',
+      resolvedPort: 3389,
+    ).toList();
+
+    verify(() => mockWifiManager.connect(ssid: 'SAN FERNANDO ', password: null))
+        .called(1);
+    expect(states.last.errorType, MedLinkErrorType.wifi);
+  });
+
   test('Partial split-tunnel failure triggers cleanup', () async {
     when(() => mockRouteManager.enableSplitTunnel(
           hospitalSubnets: ['10.0.0.0/8'],

@@ -130,7 +130,13 @@ void main() {
       expect(InputSanitizer.sanitizeSsid('Wi-Fi Pediatría'), 'Wi-Fi Pediatría');
     });
 
-    test('rejects control characters and long SSIDs', () {
+    test('preserves leading and trailing spaces in SSIDs', () {
+      expect(InputSanitizer.sanitizeSsid(' Ramoya '), ' Ramoya ');
+      expect(InputSanitizer.sanitizeSsid('SAN FERNANDO '), 'SAN FERNANDO ');
+    });
+
+    test('rejects blank, control-character and long SSIDs', () {
+      expect(() => InputSanitizer.sanitizeSsid('   '), throwsArgumentError);
       expect(() => InputSanitizer.sanitizeSsid('HUV\r\nGuest'),
           throwsArgumentError);
       expect(() => InputSanitizer.sanitizeSsid('x' * 33), throwsArgumentError);

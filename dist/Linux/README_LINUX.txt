@@ -28,8 +28,9 @@ NOTAS:
 
 - Las rutas del túnel dividido requieren sudo/polkit; la app lo solicita
   cuando hace falta.
-- El Wi-Fi automático no está implementado en Linux; conecta la red desde
-  los ajustes del sistema y pulsa "Detectar red actual".
+- El Wi-Fi usa NetworkManager (nmcli). Requiere NetworkManager activo y un
+  usuario autorizado para gestionar conexiones. Si nmcli no está instalado,
+  conecta la red desde los ajustes del sistema y pulsa "Detectar red actual".
 - Si aparece "No se encontró el archivo o directorio" al abrir el acceso
   directo, reinstala con el .run actualizado sin sudo. El instalador verifica
   que exista ~/.local/share/medlink_connect/medlink_connect y genera el

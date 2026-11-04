@@ -9,6 +9,7 @@
 #include "network_diagnostics_plugin.h"
 #include "rdp_launcher_plugin.h"
 #include "route_manager_plugin.h"
+#include "wifi_manager_plugin.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -71,6 +72,9 @@ static void my_application_activate(GApplication* application) {
   network_diagnostics_plugin_register_with_registrar(
       fl_plugin_registry_get_registrar_for_plugin(
           registry, "MedLinkNetworkDiagnostics"));
+  wifi_manager_plugin_register_with_registrar(
+      fl_plugin_registry_get_registrar_for_plugin(registry,
+                                                  "MedLinkWifiManager"));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

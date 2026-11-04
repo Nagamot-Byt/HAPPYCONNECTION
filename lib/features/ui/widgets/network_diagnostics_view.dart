@@ -44,6 +44,17 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                 const SizedBox(height: 12),
                 if (controller.wifiManager != null) ...[
                   _buildWifiSelector(context, controller),
+                  if (controller.wifiScanError != null &&
+                      controller.wifiNetworks.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: Text(
+                        l10n.logScanWifiError(controller.wifiScanError!),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12.0),
                     child: TextField(
@@ -262,6 +273,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
             child: TextField(
               controller: controller.manualWifiCtrl,
               enabled: !controller.busy,
+              onChanged: (_) => controller.selectManualWifi(),
               decoration: InputDecoration(
                 labelText: l10n.wifiNetworkName,
                 hintText: l10n.wifiNetworkNameHint,

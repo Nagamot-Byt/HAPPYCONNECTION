@@ -45,11 +45,11 @@
   "guidanceConnectedBullet1": "Si la ventana de Escritorio remoto aparece, continúa el ingreso normalmente.",
   "guidanceConnectedBullet2": "Si necesitas cerrar la conexión técnica, pulsa \"Desconectar túnel\".",
   "guidanceAdminErrorTitle": "Faltan permisos de Administrador",
-  "guidanceAdminErrorBullet1": "Windows requiere permisos elevados para modificar las rutas de red.",
-  "guidanceAdminErrorBullet2": "Cierra la aplicación y vuelve a abrirla haciendo clic derecho > \"Ejecutar como administrador\".",
+  "guidanceAdminErrorBullet1": "El sistema requiere permisos elevados para modificar las rutas de red.",
+  "guidanceAdminErrorBullet2": "Concede la elevación que solicite el sistema (sudo/polkit) e inténtalo de nuevo.",
   "guidanceWifiErrorTitle": "Problema con la red Wi-Fi",
   "guidanceWifiErrorBullet1": "Verifica que el nombre de la red y la contraseña sean correctos.",
-  "guidanceWifiErrorBullet2": "Si el problema persiste, conéctate manualmente desde Windows y luego usa \"Detectar red actual\".",
+  "guidanceWifiErrorBullet2": "Si el problema persiste, conéctate manualmente desde los ajustes del sistema y luego usa \"Detectar red actual\".",
   "clearLogs": "Limpiar registros",
   "saveSettings": "Guardar ajustes",
   "resetSettings": "Restablecer",
@@ -138,13 +138,13 @@
   "guidanceRdpErrorTitle": "Problema con RDP/puerto 3389",
   "guidanceRdpErrorBullet1": "Verifica que el servidor RDP sea accesible por el puerto configurado.",
   "guidanceRdpErrorBullet2": "Usa \"Ayudarme a corregir\" para diagnosticar rutas y conectividad.",
-  "guidanceRdpErrorBullet3": "Asegúrate de tener el cliente RDP de Windows disponible.",
+  "guidanceRdpErrorBullet3": "Asegúrate de tener un cliente RDP compatible disponible.",
   "guidanceGenericErrorTitle": "La conexión no se completó",
   "guidanceGenericErrorBullet1": "Revisa el registro de actividad para ver el motivo exacto.",
   "guidanceGenericErrorBullet2": "Usa \"Ayudarme a corregir\" para intentar reparar el problema automáticamente.",
   "guidanceGenericErrorBullet3": "Si persiste, verifica permisos de Administrador y conexión Wi-Fi.",
   "guidanceWifiReadyTitle": "Wi-Fi del hospital listo",
-  "guidanceWifiReadyBullet1": "La red ya quedó conectada en Windows.",
+  "guidanceWifiReadyBullet1": "La red ya quedó conectada en el sistema.",
   "gatewayPending": "Gateway pendiente: usa \"Detectar red actual\" si no se completa.",
   "gatewayValue": "Gateway: {value}",
   "@gatewayValue": {
@@ -168,7 +168,7 @@
   "guidanceWifiFailedBullet1": "Verifica que la red del hospital esté seleccionada.",
   "guidanceWifiFailedBullet2": "Confirma la contraseña e inténtalo de nuevo.",
   "guidanceWifiFailedBullet3": "Si es red abierta, deja la contraseña vacía.",
-  "guidanceWifiFailedBullet4": "Si Windows tarda en responder, espera unos segundos y pulsa otra vez.",
+  "guidanceWifiFailedBullet4": "Si el sistema tarda en responder, espera unos segundos y pulsa otra vez.",
   "guidanceDiagnosticsDoneTitle": "Revisión básica completada",
   "guidanceDiagnosticsDoneBullet1": "El diagnóstico terminó y dejó registro en la parte inferior.",
   "guidanceDiagnosticsDoneBullet2": "Si el problema sigue, usa \"Ayudarme a corregir\" para revisar Wi-Fi, rutas y RDP.",
@@ -320,7 +320,7 @@
       }
     }
   },
-  "logWaitingForWifiDetails": "Windows ya ve la red \"{ssid}\", esperando interfaz y gateway...",
+  "logWaitingForWifiDetails": "El sistema ya ve la red \"{ssid}\", esperando interfaz y gateway...",
   "@logWaitingForWifiDetails": {
     "placeholders": {
       "ssid": {
@@ -328,7 +328,7 @@
       }
     }
   },
-  "logWifiConfirmed": "Windows confirmó la red \"{ssid}\" con parámetros estables.",
+  "logWifiConfirmed": "El sistema confirmó la red \"{ssid}\" con parámetros estables.",
   "@logWifiConfirmed": {
     "placeholders": {
       "ssid": {
@@ -364,7 +364,7 @@
       }
     }
   },
-  "logDefaultRouteWarning": "Aviso: la ruta por defecto de Windows sigue saliendo por \"{iface}\". Eso significa que el Internet general tambien usa esa interfaz. Para mantener Internet normal mientras HIS va por rutas especificas, necesitas otra interfaz activa para la salida a Internet.",
+  "logDefaultRouteWarning": "Aviso: la ruta por defecto del sistema sigue saliendo por \"{iface}\". Eso significa que el Internet general también usa esa interfaz. Para mantener Internet normal mientras HIS va por rutas específicas, necesitas otra interfaz activa para la salida a Internet.",
   "@logDefaultRouteWarning": {
     "placeholders": {
       "iface": {
@@ -372,7 +372,7 @@
       }
     }
   },
-  "logDefaultRouteWarningWithGateway": "Aviso: la ruta por defecto de Windows sigue saliendo por \"{iface}\" (gateway {gateway}). Eso significa que el Internet general tambien usa esa interfaz. Para mantener Internet normal mientras HIS va por rutas especificas, necesitas otra interfaz activa para la salida a Internet.",
+  "logDefaultRouteWarningWithGateway": "Aviso: la ruta por defecto del sistema sigue saliendo por \"{iface}\" (gateway {gateway}). Eso significa que el Internet general también usa esa interfaz. Para mantener Internet normal mientras HIS va por rutas específicas, necesitas otra interfaz activa para la salida a Internet.",
   "@logDefaultRouteWarningWithGateway": {
     "placeholders": {
       "iface": {
@@ -483,7 +483,7 @@
   },
   "logTroubleshooterStart": "Iniciando solucionador de problemas de conexión…",
   "logNoActiveWifiError": "No se detecta una red Wi-Fi activa.",
-  "findingNoActiveWifi": "No hay una red Wi-Fi activa detectada en Windows.",
+  "findingNoActiveWifi": "No hay una red Wi-Fi activa detectada.",
   "logCurrentWifiSummary": "Wi-Fi actual: {ssid} | Interfaz: {iface} | Gateway: {gateway}.",
   "@logCurrentWifiSummary": {
     "placeholders": {
@@ -513,7 +513,7 @@
   },
   "logRdpClientAvailable": "Cliente RDP disponible.",
   "logRdpClientUnavailable": "No se encontró un cliente RDP disponible.",
-  "findingRdpClientUnavailable": "Windows no reporta un cliente RDP disponible.",
+  "findingRdpClientUnavailable": "El sistema no reporta un cliente RDP disponible.",
   "logRoutesPresent": "Las rutas del hospital ya están presentes.",
   "logRoutesMissing": "Faltan rutas del hospital: {routes}.",
   "@logRoutesMissing": {

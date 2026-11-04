@@ -24,6 +24,9 @@ chmod +x MedLinkConnect_Linux_x64.run
 No lo ejecutes con `sudo` ni como root. El instalador copia la aplicación a
 `~/.local/share/medlink_connect` y crea los accesos del menú y del escritorio.
 
+El escaneo y la conexión Wi-Fi usan NetworkManager (`nmcli`). Para configurar
+las rutas del túnel dividido la app solicita `sudo`/polkit.
+
 ## Windows — `dist/Windows/`
 
 | Archivo | Uso |

@@ -360,6 +360,92 @@ void main() {
       expect(controller.wifiNetworks, ['Anemia', 'Hospital']);
     });
 
+    test('manual Wi-Fi entry is used when no networks are returned', () {
+      controller.selectedWifiSsid = null;
+      controller.manualWifiCtrl.text = 'RedManual';
+
+      expect(controller.resolvedWifiSsid(), 'RedManual');
+
+      controller.selectManualWifi();
+
+      expect(controller.selectedWifiSsid, controller.manualWifiOption);
+      expect(controller.resolvedWifiSsid(), 'RedManual');
+    });
+
+    test('Wi-Fi scan errors are visible even during silent startup refresh',
+        () async {
+      when(() => mockWifiManager.scanNetworks())
+          .thenThrow(const WifiConnectionException('nmcli no disponible'));
+
+      await controller.refreshWifiNetworks(silent: true);
+
+      expect(controller.wifiScanError, contains('nmcli no disponible'));
+      expect(
+        controller.logs.any((line) => line.contains('nmcli no disponible')),
+        isTrue,
+      );
+    });
+
+    test('connect attempts selected Wi-Fi before requiring gateway/interface',
+        () async {
+      controller.rdpHostCtrl.text = '192.168.1.100';
+      controller.subnetsCtrl.text = '10.0.0.0/8';
+      controller.rdpPortCtrl.text = '3389';
+      controller.manualWifiCtrl.text = 'NuevaRed';
+      controller.selectManualWifi();
+      controller.gatewayCtrl.clear();
+      controller.ifaceCtrl.clear();
+
+      when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
+        (_) async => const WifiConnectionInfo(
+          ssid: '',
+          interfaceName: '',
+          gateway: '',
+        ),
+      );
+      when(() => mockRouteManager.getPrimaryDefaultRouteInfo())
+          .thenAnswer((_) async => <String, String>{});
+      when(() => mockWorkflowService.connect(
+            subnets: ['10.0.0.0/8'],
+            host: '192.168.1.100',
+            user: '',
+            domain: '',
+            selectedWifi: 'NuevaRed',
+            gateway: '',
+            iface: '',
+            resolvedPort: 3389,
+            rdpProfile: 'adaptive',
+            wifiPassword: '',
+            onSelectServer: any(named: 'onSelectServer'),
+            onSplitTunnelEnabled: any(named: 'onSplitTunnelEnabled'),
+            onSplitTunnelRolledBack: any(named: 'onSplitTunnelRolledBack'),
+            onSplitTunnelUnavailable: any(named: 'onSplitTunnelUnavailable'),
+          )).thenAnswer((_) => Stream.value(const WorkflowState(
+            step: ConnectionStep.done,
+            logMessage: 'Conectado',
+            isFinished: true,
+          )));
+
+      await controller.connect();
+
+      verify(() => mockWorkflowService.connect(
+            subnets: ['10.0.0.0/8'],
+            host: '192.168.1.100',
+            user: '',
+            domain: '',
+            selectedWifi: 'NuevaRed',
+            gateway: '',
+            iface: '',
+            resolvedPort: 3389,
+            rdpProfile: 'adaptive',
+            wifiPassword: '',
+            onSelectServer: any(named: 'onSelectServer'),
+            onSplitTunnelEnabled: any(named: 'onSplitTunnelEnabled'),
+            onSplitTunnelRolledBack: any(named: 'onSplitTunnelRolledBack'),
+            onSplitTunnelUnavailable: any(named: 'onSplitTunnelUnavailable'),
+          )).called(1);
+    });
+
     test('saveSettings can clear a previously stored Wi-Fi SSID', () async {
       await controller.saveSettings();
 

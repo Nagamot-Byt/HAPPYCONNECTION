@@ -14,6 +14,7 @@ add_executable(${BINARY_NAME}
   "route_manager_plugin.cc"
   "rdp_launcher_plugin.cc"
   "network_diagnostics_plugin.cc"
+  "wifi_manager_plugin.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 

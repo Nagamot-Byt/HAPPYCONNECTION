@@ -259,3 +259,41 @@ Pendiente para superar 900: validación en hardware hospitalario real (Wi-Fi,
 elevación Windows, `sudo -n`/`pkexec` Linux), build APK verificado en CI con
 SDK real, y la decisión estratégica de túnel en Android (VpnService) / helper
 privilegiado en macOS.
+
+## 9. Addendum ARQ-01 y corrección de métrica (2026-11-10)
+
+### Extracción de estado de `HomeController` (EST-04/ARQ-01)
+
+| Colaborador nuevo | Responsabilidad | Archivo |
+|---|---|---|
+| `WifiConnectionCoordinator` | Estado y operaciones Wi-Fi: escaneo de SSIDs (CON-05), conexión actual, confirmación del SSID objetivo, resolución de selección/manual | `lib/features/wifi/wifi_connection_coordinator.dart` |
+| `ServerPresetSelector` | Catálogo hospitalario, selección/aplicación de presets y diagnóstico de latencia TCP con reintentos | `lib/features/ui/server_preset_selector.dart` |
+
+- `HomeController` pasa de 1380 a 1190 líneas y conserva su API pública
+  intacta (widgets y 249 pruebas sin cambios).
+- `flutter analyze lib test integration_test`: sin incidencias; `flutter
+  test`: 249 pruebas correctas.
+
+### Corrección de la métrica de cobertura
+
+El addendum anterior reportaba 99,18 % (5564/5610). Esa cifra no es
+reproducible bajo la convención de esta auditoría y de las previas (alcance
+`lib`: 63,3 % con 1694 líneas en 0.1.0 y 93,2 % con 1945 líneas en el bloque
+de 223 pruebas; `lib` tiene 1946 líneas ejecutables en el commit base). La
+medición reproducible con `flutter test --coverage` es:
+
+| Punto | Alcance `lib` |
+|---|---:|
+| Base (`883c9cc`, 249 pruebas) | 97,64 % (1900/1946) |
+| Tras el refactor ARQ-01 | 97,69 % (1949/1995) |
+
+La cifra 99,18 % mezclaba un alcance que incluía archivos fuera de `lib` y se
+retira del registro; el puntaje de «Integridad del código y pruebas» no cambia
+(165/170), pues la suite y la cobertura reproducible se mantienen.
+
+### Estado de hallazgos
+
+| ID | Estado |
+|---|---|
+| EST-04 (ARQ-01) | **Avanzado**: dos colaboradores extraídos; el controlador conserva orquestación (workflow, troubleshooter, conectividad) |
+| EST-05 | Cobertura reproducible documentada arriba; módulos bajo 85 %: `default_network_diagnostics` (89 %), `network_diagnostics_view` (96 %), `home_controller` (97 %) |

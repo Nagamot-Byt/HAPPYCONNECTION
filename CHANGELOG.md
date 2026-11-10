@@ -21,14 +21,20 @@ Todas las versiones relevantes de MedLink Connect.
 - Job `build-android` en CI (Java 17 + Flutter 3.27.4) que compila
   `flutter build apk --release` y publica el APK como artefacto, para validar
   Android en cada push/PR sin depender de un SDK local.
-- Suite ampliada a 249 pruebas con cobertura de líneas del 99,18 %: cubre el
-  arranque `main()`, el flujo completo de pasos del workflow, el diálogo de
-  restablecer ajustes, fallos de DNS/ICMP/TCP con causa, selección de servidor
-  con error, cliente/manejador RDP ausente, Wi-Fi que nunca confirma, fallback
-  de gateway y `checkTcpPortDetailed`.
+- Suite ampliada a 249 pruebas: cubre el arranque `main()`, el flujo completo
+  de pasos del workflow, el diálogo de restablecer ajustes, fallos de
+  DNS/ICMP/TCP con causa, selección de servidor con error, cliente/manejador
+  RDP ausente, Wi-Fi que nunca confirma, fallback de gateway y
+  `checkTcpPortDetailed`.
 
 ### Cambiado
 
+- ARQ-01: el estado y la lógica Wi-Fi de `HomeController` se extrajeron a
+  `WifiConnectionCoordinator` (escaneo de SSIDs, conexión actual, confirmación
+  del SSID objetivo y resolución de la selección) y la selección de presets de
+  servidor a `ServerPresetSelector` (catálogo hospitalario, aplicación y
+  diagnóstico de latencia TCP con reintentos). La API pública del controlador
+  no cambia y este pasa de 1380 a 1190 líneas.
 - `flutter_secure_storage` migrado de 9.2.4 a 10.3.4: el backend macOS pasa a
   `flutter_secure_storage_darwin` (el paquete `..._macos` está discontinuado) y
   se retira `encryptedSharedPreferences` (obsoleto en Android). La API de
@@ -110,10 +116,14 @@ Todas las versiones relevantes de MedLink Connect.
 
 ### Verificación
 
-- `flutter analyze`: sin incidencias.
-- `flutter test`: 223 pruebas correctas (unitarias y de widget) con Flutter
-  3.27.4 / Dart 3.6.2; cobertura de líneas 93,2 % (1813/1945).
-- Nuevas suites: `HomeController` (82), widgets de UI (25),
+- `flutter analyze lib test integration_test`: sin incidencias.
+- `flutter test`: 249 pruebas correctas (unitarias y de widget) con Flutter
+  3.27.4 / Dart 3.6.2.
+- Cobertura de líneas (alcance `lib`, convención de auditorías previas):
+  97,64 % (1900/1946) tras el bloque de verificación y 97,69 % (1949/1995)
+  tras el refactor ARQ-01; el 99,18 % (5564/5610) citado en el addendum
+  anterior usaba un alcance no reproducible bajo esta convención y se retira.
+- Suites: `HomeController` (82), widgets de UI (25),
   `DefaultRouteManager` (21), `DefaultRdpLauncher` (15) y `DefaultWifiManager`
   (11) con los canales nativos mockeados vía `TestDefaultBinaryMessengerBinding`.
 - `flutter test integration_test/app_integration_test.dart -d linux`: 3

@@ -12,6 +12,8 @@ import 'package:medlink_connect/core/settings_storage.dart';
 import 'package:medlink_connect/core/wifi_manager.dart';
 import 'package:medlink_connect/features/ui/error_guidance.dart';
 import 'package:medlink_connect/features/ui/home_models.dart';
+import 'package:medlink_connect/features/ui/server_preset_selector.dart';
+import 'package:medlink_connect/features/wifi/wifi_connection_coordinator.dart';
 
 export 'package:medlink_connect/features/ui/home_models.dart'
     show ConnectionLogEntry, ServerPreset;
@@ -57,7 +59,7 @@ class HomeController extends ChangeNotifier {
       defaultTargetPlatform == TargetPlatform.windows ||
       defaultTargetPlatform == TargetPlatform.linux;
 
-  bool get wifiSupported => _isWifiSupported && wifiManager != null;
+  bool get wifiSupported => _wifi.isSupported;
 
   bool get rdpProfileSupported =>
       defaultTargetPlatform == TargetPlatform.windows;
@@ -86,6 +88,31 @@ class HomeController extends ChangeNotifier {
   final ConnectionLogStore _logStore = ConnectionLogStore();
   List<ConnectionLogEntry> get logEntries => _logStore.entries;
   List<String> get logs => _logStore.formatted;
+
+  late final WifiConnectionCoordinator _wifi = WifiConnectionCoordinator(
+    wifiManager: wifiManager,
+    l10n: l10n,
+    onLog: log,
+    onChanged: _notify,
+    currentGatewayAndInterface: () => (
+      gateway: gatewayCtrl.text,
+      iface: ifaceCtrl.text,
+    ),
+    applyGatewayAndInterface: (gateway, iface) {
+      gatewayCtrl.text = gateway;
+      ifaceCtrl.text = iface;
+    },
+  );
+
+  late final ServerPresetSelector _presetSelector = ServerPresetSelector(
+    networkDiagnostics: networkDiagnostics,
+    l10n: l10n,
+    onLog: log,
+    onApply: (preset) {
+      rdpHostCtrl.text = preset.host;
+      rdpPortCtrl.text = preset.port.toString();
+    },
+  );
 
   String? _guidanceTitle;
   String? get guidanceTitle => _guidanceTitle;
@@ -120,41 +147,33 @@ class HomeController extends ChangeNotifier {
     _notify();
   }
 
-  String _selectedServerPresetId = 'manual';
-  String get selectedServerPresetId => _selectedServerPresetId;
+  String get selectedServerPresetId => _presetSelector.selectedPresetId;
   set selectedServerPresetId(String value) {
-    _selectedServerPresetId = value;
+    _presetSelector.selectedPresetId = value;
     _notify();
   }
 
-  List<ServerPreset> _serverPresets = [];
-  List<ServerPreset> get serverPresets => List.unmodifiable(_serverPresets);
+  List<ServerPreset> get serverPresets => _presetSelector.presets;
   set serverPresets(List<ServerPreset> value) {
-    _serverPresets = List.from(value);
+    _presetSelector.presets = value;
     _notify();
   }
 
-  List<String> _wifiNetworks = [];
-  List<String> get wifiNetworks => List.unmodifiable(_wifiNetworks);
+  List<String> get wifiNetworks => _wifi.networks;
 
-  bool _wifiNetworksLoading = false;
-  bool get wifiNetworksLoading => _wifiNetworksLoading;
+  bool get wifiNetworksLoading => _wifi.networksLoading;
 
-  String? _wifiScanError;
-  String? get wifiScanError => _wifiScanError;
+  String? get wifiScanError => _wifi.scanError;
 
-  String? _selectedWifiSsid;
-  String? get selectedWifiSsid => _selectedWifiSsid;
+  String? get selectedWifiSsid => _wifi.selectedSsid;
   set selectedWifiSsid(String? value) {
-    _selectedWifiSsid = value;
+    _wifi.selectedSsid = value;
     _notify();
   }
 
-  String _currentWifiSsid = '';
-  String get currentWifiSsid => _currentWifiSsid;
+  String get currentWifiSsid => _wifi.currentSsid;
 
-  static const _kManualWifiOption = '__manual__';
-  String get manualWifiOption => _kManualWifiOption;
+  String get manualWifiOption => WifiConnectionCoordinator.manualWifiOption;
 
   void log(String message, {bool isError = false}) {
     _logStore.add(message, isError: isError);
@@ -294,39 +313,10 @@ class HomeController extends ChangeNotifier {
     _preferMostStableServer = s.preferMostStableServer;
     selectedWifiSsid = s.wifiSsid.isEmpty ? null : s.wifiSsid;
     manualWifiCtrl.text = s.wifiSsid;
-    _selectedServerPresetId = s.selectedServerPresetId;
+    _presetSelector.selectedPresetId = s.selectedServerPresetId;
 
-    serverPresets = [
-      ServerPreset(
-          id: 'pediatrico',
-          label: l10n.presetPediatric,
-          host: 'serv_pediatrico.huv.gov.co',
-          port: 3389),
-      ServerPreset(
-          id: 'ginecologico',
-          label: l10n.presetGynecology,
-          host: 'serv_ginecologico.huv.gov.co',
-          port: 3389),
-      ServerPreset(
-          id: 'moviles',
-          label: l10n.presetMobile,
-          host: 'serv_moviles.huv.gov.co',
-          port: 3389),
-      ServerPreset(
-          id: 'consulta_externa',
-          label: l10n.presetOutpatient,
-          host: 'serv_const_ext.huv.gov.co',
-          port: 3389),
-      ServerPreset(
-          id: 'urgencias',
-          label: l10n.presetEmergency,
-          host: 'serv_urgencias.huv.gov.co',
-          port: 3389),
-    ];
-    if (_selectedServerPresetId != 'manual' &&
-        !_serverPresets.any((p) => p.id == _selectedServerPresetId)) {
-      _selectedServerPresetId = 'manual';
-    }
+    _presetSelector.presets = ServerPresetSelector.hospitalCatalog(l10n);
+    _presetSelector.keepSelectionValid();
   }
 
   Future<void> saveSettings() async {
@@ -356,80 +346,23 @@ class HomeController extends ChangeNotifier {
     }
   }
 
-  String resolvedWifiSsid() {
-    final selected = selectedWifiSsid;
-    if (selected == null ||
-        selected.isEmpty ||
-        selected == _kManualWifiOption ||
-        _wifiNetworks.isEmpty) {
-      return manualWifiCtrl.text;
-    }
-    return selected;
-  }
+  String resolvedWifiSsid() => _wifi.resolveSsid(manualWifiCtrl.text);
 
   void selectManualWifi() {
-    if (_selectedWifiSsid != _kManualWifiOption) {
-      _selectedWifiSsid = _kManualWifiOption;
+    if (_wifi.selectManual()) {
       _notify();
     }
   }
 
-  Future<void> refreshWifiNetworks({bool silent = false}) async {
-    if (wifiManager == null || !_isWifiSupported) return;
-    if (!silent) {
-      _wifiNetworksLoading = true;
-      _notify();
-      log(l10n.logSearchingWifi);
-    }
-    try {
-      final networks = await wifiManager!.scanNetworks();
-      final unique = networks.toSet().toList()
-        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-      _wifiNetworks = unique;
-      _wifiScanError = null;
-      if (!silent) log(l10n.logNetworksFound(unique.length));
-    } catch (e) {
-      // Un escaneo fallido deja el estado de las redes en desconocido: no se
-      // muestran SSIDs posiblemente obsoletos de un escaneo anterior.
-      _wifiNetworks = [];
-      _wifiScanError = '$e';
-      log(l10n.logScanWifiError('$e'), isError: true);
-    } finally {
-      _wifiNetworksLoading = false;
-      _notify();
-    }
+  Future<void> refreshWifiNetworks({bool silent = false}) {
+    return _wifi.refreshNetworks(silent: silent);
   }
 
   Future<WifiConnectionInfo?> syncCurrentWifiInfo({
     bool silent = false,
     bool overwrite = true,
-  }) async {
-    if (wifiManager == null || !_isWifiSupported) return null;
-    try {
-      final info = await wifiManager!.getCurrentConnectionInfo();
-      _currentWifiSsid = info.ssid;
-      if (info.ssid.isNotEmpty) {
-        if (overwrite) {
-          gatewayCtrl.text = info.gateway.trim();
-          ifaceCtrl.text = info.interfaceName.trim();
-        }
-        if (!silent) {
-          log(l10n.logCurrentNetwork(
-            info.ssid,
-            gatewayCtrl.text,
-            ifaceCtrl.text,
-          ));
-        }
-      } else {
-        if (!silent) log(l10n.logNoActiveWifi);
-      }
-      _notify();
-      return info;
-    } catch (e) {
-      if (!silent) log(l10n.logCurrentNetworkError('$e'), isError: true);
-      _notify();
-      return null;
-    }
+  }) {
+    return _wifi.syncCurrentInfo(silent: silent, overwrite: overwrite);
   }
 
   // --- Extracted Methods ---
@@ -450,17 +383,11 @@ class HomeController extends ChangeNotifier {
     return 'adaptive';
   }
 
-  ServerPreset? presetById(String id) {
-    for (final preset in serverPresets) {
-      if (preset.id == id) return preset;
-    }
-    return null;
-  }
+  ServerPreset? presetById(String id) => _presetSelector.presetById(id);
 
   void applyServerPreset(ServerPreset preset, {bool announce = true}) {
-    rdpHostCtrl.text = preset.host;
-    rdpPortCtrl.text = preset.port.toString();
-    selectedServerPresetId = preset.id;
+    _presetSelector.applyPreset(preset);
+    _notify();
     if (announce) {
       log(l10n.logPresetApplied(preset.label, preset.host));
       _notify();
@@ -470,71 +397,11 @@ class HomeController extends ChangeNotifier {
   Future<ServerPreset?> diagnoseBestServerPreset({
     bool updateGuidance = true,
   }) async {
-    if (serverPresets.isEmpty) return null;
-    log(l10n.logDiagnosingBestServer, isError: false);
-    final responses = <MapEntry<ServerPreset, int>>[];
-    // Los cinco destinos se prueban en paralelo para no encadenar sus tiempos
-    // de espera; se conserva el de menor latencia TCP.
-    await Future.wait([
-      for (final preset in serverPresets)
-        if (preset.isConfigured)
-          () async {
-            try {
-              final result = await measureTcpPortWithRetryDetailed(
-                preset.host,
-                preset.port,
-                label: preset.label,
-              );
-              final ms = result.latency;
-              if (ms != null && ms > 0) {
-                log(l10n.logServerResponded(preset.label, ms));
-                responses.add(MapEntry(preset, ms));
-              } else {
-                log(
-                  l10n.logServerNoResponse(
-                    preset.label,
-                    result.error ?? 'unknown',
-                  ),
-                );
-              }
-            } catch (e) {
-              log(l10n.logServerNoResponse(preset.label, '$e'));
-            }
-          }(),
-    ]);
-
-    ServerPreset? best;
-    int? bestMs;
-    for (final response in responses) {
-      if (bestMs == null || response.value < bestMs) {
-        best = response.key;
-        bestMs = response.value;
-      }
+    final best = await _presetSelector.diagnoseBest(apply: updateGuidance);
+    if (updateGuidance && best != null) {
+      _notify();
     }
-    if (best != null) {
-      if (bestMs != null) {
-        log(l10n.logBestServer(best.label, bestMs));
-      }
-      if (updateGuidance) applyServerPreset(best, announce: false);
-      return best;
-    }
-    ServerPreset? fallback;
-    for (final preset in serverPresets) {
-      if (preset.isConfigured) {
-        fallback = preset;
-        break;
-      }
-    }
-    if (fallback == null) {
-      log(l10n.presetsEmptySubtitle, isError: true);
-      return null;
-    }
-    log(
-      l10n.logNoServerResponded(fallback.label),
-      isError: true,
-    );
-    if (updateGuidance) applyServerPreset(fallback, announce: false);
-    return fallback;
+    return best;
   }
 
   Future<void> connectWifiOnly() async {
@@ -585,40 +452,8 @@ class HomeController extends ChangeNotifier {
     }
   }
 
-  Future<WifiConnectionInfo?> waitForTargetWifiConnection(String ssid) async {
-    const maxAttempts = 12;
-    WifiConnectionInfo? lastMatch;
-    var stableAttempts = 0;
-    for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      await Future<void>.delayed(
-        Duration(milliseconds: attempt == 0 ? 900 : 1400),
-      );
-      final info = await syncCurrentWifiInfo(silent: true);
-      if (info == null) continue;
-      if (info.ssid != ssid) {
-        stableAttempts = 0;
-        continue;
-      }
-      lastMatch = info;
-      final hasInterface = info.interfaceName.trim().isNotEmpty;
-      final hasGateway = info.gateway.trim().isNotEmpty;
-      if (!hasInterface || !hasGateway) {
-        if (attempt == 0 || attempt == 3 || attempt == 6 || attempt == 9) {
-          log(l10n.logWaitingForWifiDetails(ssid));
-        }
-        stableAttempts = 0;
-        continue;
-      }
-      stableAttempts++;
-      if (stableAttempts >= 2) {
-        log(l10n.logWifiConfirmed(ssid));
-        return info;
-      }
-    }
-    if (lastMatch != null && lastMatch.ssid == ssid) {
-      return lastMatch;
-    }
-    return null;
+  Future<WifiConnectionInfo?> waitForTargetWifiConnection(String ssid) {
+    return _wifi.waitForTargetConnection(ssid);
   }
 
   Future<bool> connectSelectedWifi({required bool requireSelection}) async {
@@ -729,7 +564,7 @@ class HomeController extends ChangeNotifier {
     int port, {
     String? label,
   }) async {
-    final result = await measureTcpPortWithRetryDetailed(
+    final result = await _presetSelector.measureTcpPortWithRetryDetailed(
       host,
       port,
       label: label,
@@ -741,37 +576,12 @@ class HomeController extends ChangeNotifier {
     String host,
     int port, {
     String? label,
-  }) async {
-    const delays = <Duration>[
-      Duration.zero,
-      Duration(milliseconds: 350),
-      Duration(milliseconds: 700),
-    ];
-
-    int? best;
-    String? lastError;
-    for (var attempt = 0; attempt < delays.length; attempt++) {
-      final delay = delays[attempt];
-      if (delay > Duration.zero) {
-        log(
-          label == null
-              ? l10n.logRetryingTcpNoLabel(attempt, delays.length - 1)
-              : l10n.logRetryingTcp(label, attempt, delays.length - 1),
-        );
-        await Future<void>.delayed(delay);
-      }
-      final probe = await networkDiagnostics.checkTcpPortDetailed(host, port);
-      final latency = probe.value;
-      if (latency != null) {
-        best = best == null ? latency : (latency < best ? latency : best);
-        if (attempt > 0) {
-          log(l10n.logServerRetrySuccess(attempt + 1));
-        }
-        break;
-      }
-      lastError = probe.error;
-    }
-    return (latency: best, error: best == null ? lastError : null);
+  }) {
+    return _presetSelector.measureTcpPortWithRetryDetailed(
+      host,
+      port,
+      label: label,
+    );
   }
 
   String? _diagnosticTarget() {
@@ -1348,7 +1158,7 @@ class HomeController extends ChangeNotifier {
       _preferMostStableServer = s.preferMostStableServer;
       selectedWifiSsid = s.wifiSsid.isEmpty ? null : s.wifiSsid;
       manualWifiCtrl.text = s.wifiSsid;
-      _selectedServerPresetId = s.selectedServerPresetId;
+      _presetSelector.selectedPresetId = s.selectedServerPresetId;
       wifiPasswordCtrl.clear();
       _notify();
       log(l10n.logSettingsReset);

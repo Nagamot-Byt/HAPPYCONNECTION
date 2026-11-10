@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations_en.dart';
@@ -41,6 +42,23 @@ void _stubSuccessfulRdp(
         profile: 'adaptive',
         measuredLatencyMs: latency,
       )).thenAnswer((_) async => 'RDP Launched');
+}
+
+void _stubRoutes(
+  MockRouteManager manager, {
+  String gateway = '192.168.1.1',
+  String iface = 'Wi-Fi',
+}) {
+  when(() => manager.enableSplitTunnel(
+        hospitalSubnets: ['10.0.0.0/8'],
+        gateway: gateway,
+        interfaceName: iface,
+      )).thenAnswer((_) async => 'Rutas agregadas');
+  when(() => manager.verifyRoutes(
+        hospitalSubnets: ['10.0.0.0/8'],
+        gateway: gateway,
+        interfaceName: iface,
+      )).thenAnswer((_) async => []);
 }
 
 void main() {
@@ -882,5 +900,530 @@ void main() {
 
     expect(states.last.step, ConnectionStep.error);
     expect(states.last.isError, isTrue);
+  });
+
+  test('connecting before localizations are configured fails fast', () async {
+    final unconfigured = ConnectionWorkflowService(
+      mockRouteManager,
+      mockNetworkDiagnostics,
+      mockRdpLauncher,
+    );
+
+    await expectLater(
+      unconfigured.connect(
+        subnets: const [],
+        host: '192.168.1.100',
+        user: '',
+        domain: '',
+        selectedWifi: '',
+        gateway: '',
+        iface: '',
+        resolvedPort: 3389,
+      ),
+      emitsError(isA<StateError>()),
+    );
+  });
+
+  test('Wi-Fi password is forwarded when joining a new network', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    var infoCalls = 0;
+    when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer((_) async {
+      infoCalls++;
+      if (infoCalls == 1) {
+        return const WifiConnectionInfo(
+          ssid: 'OtraRed',
+          interfaceName: 'Wi-Fi',
+          gateway: '192.168.1.1',
+        );
+      }
+      return const WifiConnectionInfo(
+        ssid: 'HUV_WIFI',
+        interfaceName: 'wlan0',
+        gateway: '192.168.5.1',
+      );
+    });
+    when(() => mockWifiManager.connect(ssid: 'HUV_WIFI', password: 'secreto'))
+        .thenAnswer((_) async => 'aceptada');
+    _stubRoutes(mockRouteManager, gateway: '192.168.5.1', iface: 'wlan0');
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: 'HUV_WIFI',
+      gateway: '',
+      iface: '',
+      resolvedPort: 3389,
+      wifiPassword: 'secreto',
+    ).toList();
+
+    verify(() => mockWifiManager.connect(ssid: 'HUV_WIFI', password: 'secreto'))
+        .called(1);
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('Wi-Fi that never confirms reports the system response', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
+      (_) async => const WifiConnectionInfo(
+        ssid: 'OtraRed',
+        interfaceName: 'Wi-Fi',
+        gateway: '192.168.1.1',
+      ),
+    );
+    when(() => mockWifiManager.connect(ssid: 'HUV_WIFI', password: null))
+        .thenAnswer((_) async => 'aceptada por NetworkManager');
+
+    fakeAsync((async) {
+      final states = <WorkflowState>[];
+      final subscription = workflowService.connect(
+        subnets: ['10.0.0.0/8'],
+        host: '192.168.1.100',
+        user: '',
+        domain: '',
+        selectedWifi: 'HUV_WIFI',
+        gateway: '',
+        iface: '',
+        resolvedPort: 3389,
+      ).listen(states.add);
+
+      async.elapse(const Duration(seconds: 12));
+      async.flushMicrotasks();
+      subscription.cancel();
+
+      expect(states.last.step, ConnectionStep.error);
+      expect(states.last.errorType, MedLinkErrorType.wifi);
+      expect(states.last.logMessage, contains('HUV_WIFI'));
+      expect(
+        states.last.logMessage,
+        contains('aceptada por NetworkManager'),
+      );
+    });
+  });
+
+  test('Wi-Fi that never confirms without a response uses the generic message',
+      () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
+      (_) async => const WifiConnectionInfo(
+        ssid: 'OtraRed',
+        interfaceName: 'Wi-Fi',
+        gateway: '192.168.1.1',
+      ),
+    );
+    when(() => mockWifiManager.connect(ssid: 'HUV_WIFI', password: null))
+        .thenAnswer((_) async => '   ');
+
+    fakeAsync((async) {
+      final states = <WorkflowState>[];
+      final subscription = workflowService.connect(
+        subnets: ['10.0.0.0/8'],
+        host: '192.168.1.100',
+        user: '',
+        domain: '',
+        selectedWifi: 'HUV_WIFI',
+        gateway: '',
+        iface: '',
+        resolvedPort: 3389,
+      ).listen(states.add);
+
+      async.elapse(const Duration(seconds: 12));
+      async.flushMicrotasks();
+      subscription.cancel();
+
+      expect(states.last.step, ConnectionStep.error);
+      expect(states.last.errorType, MedLinkErrorType.wifi);
+      expect(states.last.logMessage, contains('HUV_WIFI'));
+      expect(states.last.logMessage, isNot(contains('Respuesta')));
+    });
+  });
+
+  test('a DNS lookup timeout is reported and the flow continues', () {
+    _stubRoutes(mockRouteManager);
+    when(() => mockNetworkDiagnostics.ping('nonexistent.invalid'))
+        .thenAnswer((_) async => 20);
+    when(() => mockNetworkDiagnostics.checkTcpPort('nonexistent.invalid', 3389))
+        .thenAnswer((_) async => 25);
+    when(() => mockRdpLauncher.isRdpClientAvailable())
+        .thenAnswer((_) async => true);
+    when(() => mockRdpLauncher.preLaunch()).thenAnswer((_) async => true);
+    when(() => mockRdpLauncher.launchRdp(
+          host: 'nonexistent.invalid',
+          port: 3389,
+          username: null,
+          domain: null,
+          profile: 'adaptive',
+          measuredLatencyMs: 25,
+        )).thenAnswer((_) async => 'RDP Launched');
+
+    fakeAsync((async) {
+      final states = <WorkflowState>[];
+      final subscription = workflowService.connect(
+        subnets: ['10.0.0.0/8'],
+        host: 'nonexistent.invalid',
+        user: '',
+        domain: '',
+        selectedWifi: '',
+        gateway: '192.168.1.1',
+        iface: 'Wi-Fi',
+        resolvedPort: 3389,
+      ).listen(states.add);
+
+      async.elapse(const Duration(seconds: 10));
+      async.flushMicrotasks();
+      subscription.cancel();
+
+      expect(
+        states.map((state) => state.logMessage),
+        contains(contains('4s')),
+      );
+      expect(states.last.step, ConnectionStep.done);
+    });
+  });
+
+  test('route manager fills a missing gateway for the connected Wi-Fi',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
+      (_) async => const WifiConnectionInfo(
+        ssid: 'HUV_WIFI',
+        interfaceName: 'wlan0',
+        gateway: '',
+      ),
+    );
+    when(() => mockRouteManager.getPrimaryDefaultRouteInfo()).thenAnswer(
+      (_) async => {
+        'gateway': '192.168.5.1',
+        'interfaceName': 'WLAN0',
+      },
+    );
+    _stubRoutes(mockRouteManager, gateway: '192.168.5.1', iface: 'WLAN0');
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: 'HUV_WIFI',
+      gateway: '',
+      iface: '',
+      resolvedPort: 3389,
+    ).toList();
+
+    expect(states.last.step, ConnectionStep.done);
+    verify(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '192.168.5.1',
+          interfaceName: 'WLAN0',
+        )).called(1);
+  });
+
+  test('missing routes after enabling the tunnel abort the flow', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => 'Rutas agregadas');
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => ['10.0.0.0/8']);
+    when(() => mockRouteManager.disableSplitTunnel())
+        .thenAnswer((_) async => 'Revertido');
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+    ).toList();
+
+    expect(states.last.step, ConnectionStep.error);
+    expect(states.last.logMessage, contains('10.0.0.0/8'));
+    verify(() => mockRouteManager.disableSplitTunnel()).called(1);
+  });
+
+  test('Android route verification failure rolls back and notifies', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => 'Rutas agregadas');
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => ['10.0.0.0/8']);
+    when(() => mockRouteManager.disableSplitTunnel())
+        .thenAnswer((_) async => 'Revertido');
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    var rolledBack = false;
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+      onSplitTunnelRolledBack: () async {
+        rolledBack = true;
+      },
+    ).toList();
+
+    expect(rolledBack, isTrue);
+    expect(states.last.step, ConnectionStep.done);
+    expect(
+      states.map((state) => state.logMessage),
+      contains(contains('Túnel dividido no disponible')),
+    );
+  });
+
+  test('server selection errors are logged and the connection continues',
+      () async {
+    _stubRoutes(mockRouteManager);
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+      onSelectServer: () async => throw Exception('sin presets'),
+    ).toList();
+
+    expect(
+      states.map((state) => state.logMessage),
+      contains(contains('sin presets')),
+    );
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('DNS failures do not abort the probe sequence', () async {
+    _stubRoutes(mockRouteManager);
+    when(() => mockNetworkDiagnostics.ping('nonexistent.invalid'))
+        .thenAnswer((_) async => 20);
+    when(() => mockNetworkDiagnostics.checkTcpPort('nonexistent.invalid', 3389))
+        .thenAnswer((_) async => 25);
+    when(() => mockRdpLauncher.isRdpClientAvailable())
+        .thenAnswer((_) async => true);
+    when(() => mockRdpLauncher.preLaunch()).thenAnswer((_) async => true);
+    when(() => mockRdpLauncher.launchRdp(
+          host: 'nonexistent.invalid',
+          port: 3389,
+          username: null,
+          domain: null,
+          profile: 'adaptive',
+          measuredLatencyMs: 25,
+        )).thenAnswer((_) async => 'RDP Launched');
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: 'nonexistent.invalid',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+    ).toList();
+
+    final dnsFailure = states.where(
+      (state) => state.step == ConnectionStep.preLaunch && state.isError,
+    );
+    expect(dnsFailure, isNotEmpty);
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('ICMP failures carry the probe cause', () async {
+    _stubRoutes(mockRouteManager);
+    when(() => mockNetworkDiagnostics.ping('192.168.1.100'))
+        .thenAnswer((_) async => null);
+    when(() => mockNetworkDiagnostics.lastProbeError)
+        .thenReturn('tiempo agotado');
+    when(() => mockNetworkDiagnostics.checkTcpPort('192.168.1.100', 3389))
+        .thenAnswer((_) async => 25);
+    when(() => mockRdpLauncher.isRdpClientAvailable())
+        .thenAnswer((_) async => true);
+    when(() => mockRdpLauncher.preLaunch()).thenAnswer((_) async => true);
+    when(() => mockRdpLauncher.launchRdp(
+          host: '192.168.1.100',
+          port: 3389,
+          username: null,
+          domain: null,
+          profile: 'adaptive',
+          measuredLatencyMs: 25,
+        )).thenAnswer((_) async => 'RDP Launched');
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+    ).toList();
+
+    expect(
+      states.map((state) => state.logMessage),
+      contains(contains('Causa: tiempo agotado')),
+    );
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('ICMP failures without a cause keep the generic message', () async {
+    _stubRoutes(mockRouteManager);
+    when(() => mockNetworkDiagnostics.ping('192.168.1.100'))
+        .thenAnswer((_) async => null);
+    when(() => mockNetworkDiagnostics.checkTcpPort('192.168.1.100', 3389))
+        .thenAnswer((_) async => 25);
+    when(() => mockRdpLauncher.isRdpClientAvailable())
+        .thenAnswer((_) async => true);
+    when(() => mockRdpLauncher.preLaunch()).thenAnswer((_) async => true);
+    when(() => mockRdpLauncher.launchRdp(
+          host: '192.168.1.100',
+          port: 3389,
+          username: null,
+          domain: null,
+          profile: 'adaptive',
+          measuredLatencyMs: 25,
+        )).thenAnswer((_) async => 'RDP Launched');
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+    ).toList();
+
+    final icmp = states.firstWhere(
+      (state) => state.logMessage.contains('ICMP'),
+    );
+    expect(icmp.isError, isTrue);
+    expect(icmp.logMessage, isNot(contains('Causa:')));
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('TCP failures report the probe cause and roll back', () async {
+    _stubRoutes(mockRouteManager);
+    when(() => mockNetworkDiagnostics.ping('192.168.1.100'))
+        .thenAnswer((_) async => 20);
+    when(() => mockNetworkDiagnostics.checkTcpPort('192.168.1.100', 3389))
+        .thenAnswer((_) async => null);
+    when(() => mockNetworkDiagnostics.lastProbeError)
+        .thenReturn('conexión rechazada');
+    when(() => mockRouteManager.disableSplitTunnel())
+        .thenAnswer((_) async => 'Revertido');
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+    ).toList();
+
+    expect(states.last.step, ConnectionStep.error);
+    expect(states.last.logMessage, contains('conexión rechazada'));
+    expect(states.last.logMessage, contains('3389'));
+    verify(() => mockRouteManager.disableSplitTunnel()).called(1);
+  });
+
+  test('a missing RDP client aborts before launching', () async {
+    _stubRoutes(mockRouteManager);
+    when(() => mockNetworkDiagnostics.ping('192.168.1.100'))
+        .thenAnswer((_) async => 20);
+    when(() => mockNetworkDiagnostics.checkTcpPort('192.168.1.100', 3389))
+        .thenAnswer((_) async => 25);
+    when(() => mockRdpLauncher.isRdpClientAvailable())
+        .thenAnswer((_) async => false);
+    when(() => mockRouteManager.disableSplitTunnel())
+        .thenAnswer((_) async => 'Revertido');
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+    ).toList();
+
+    expect(states.last.step, ConnectionStep.error);
+    expect(states.last.logMessage, contains('cliente RDP'));
+    verifyNever(() => mockRdpLauncher.launchRdp(
+          host: any(named: 'host'),
+          port: any(named: 'port'),
+          username: any(named: 'username'),
+          domain: any(named: 'domain'),
+          profile: any(named: 'profile'),
+          measuredLatencyMs: any(named: 'measuredLatencyMs'),
+        ));
+  });
+
+  test('a missing rdp:// handler aborts before launching', () async {
+    _stubRoutes(mockRouteManager);
+    when(() => mockNetworkDiagnostics.ping('192.168.1.100'))
+        .thenAnswer((_) async => 20);
+    when(() => mockNetworkDiagnostics.checkTcpPort('192.168.1.100', 3389))
+        .thenAnswer((_) async => 25);
+    when(() => mockRdpLauncher.isRdpClientAvailable())
+        .thenAnswer((_) async => true);
+    when(() => mockRdpLauncher.preLaunch()).thenAnswer((_) async => false);
+    when(() => mockRouteManager.disableSplitTunnel())
+        .thenAnswer((_) async => 'Revertido');
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+    ).toList();
+
+    expect(states.last.step, ConnectionStep.error);
+    expect(states.last.logMessage, contains('rdp://'));
   });
 }

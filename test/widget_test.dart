@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:medlink_connect/main.dart';
+import 'package:medlink_connect/main.dart' as app;
 import 'package:medlink_connect/core/injection.dart';
 import 'package:medlink_connect/core/theme_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -57,5 +58,17 @@ void main() {
       Theme.of(tester.element(find.byType(Scaffold))).brightness,
       Brightness.dark,
     );
+  });
+
+  testWidgets('main() bootstraps the dependency graph and mounts the app',
+      (WidgetTester tester) async {
+    await getIt.reset();
+    SharedPreferences.setMockInitialValues({});
+
+    await app.main();
+    await tester.pump();
+
+    expect(find.byType(MaterialApp), findsOneWidget);
+    expect(find.text('MedLink Connect'), findsOneWidget);
   });
 }

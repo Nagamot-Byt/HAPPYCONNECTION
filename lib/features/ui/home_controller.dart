@@ -389,6 +389,9 @@ class HomeController extends ChangeNotifier {
       _wifiScanError = null;
       if (!silent) log(l10n.logNetworksFound(unique.length));
     } catch (e) {
+      // Un escaneo fallido deja el estado de las redes en desconocido: no se
+      // muestran SSIDs posiblemente obsoletos de un escaneo anterior.
+      _wifiNetworks = [];
       _wifiScanError = '$e';
       log(l10n.logScanWifiError('$e'), isError: true);
     } finally {

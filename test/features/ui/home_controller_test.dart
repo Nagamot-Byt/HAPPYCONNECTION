@@ -553,6 +553,21 @@ void main() {
       );
     });
 
+    test('a failed rescan drops the previous SSID list', () async {
+      when(() => mockWifiManager.scanNetworks())
+          .thenAnswer((_) async => ['HUV_WIFI', 'Invitados_HUV']);
+      await controller.refreshWifiNetworks(silent: true);
+      expect(controller.wifiNetworks, isNotEmpty);
+
+      when(() => mockWifiManager.scanNetworks())
+          .thenThrow(const WifiConnectionException('escaneo fallido'));
+
+      await controller.refreshWifiNetworks();
+
+      expect(controller.wifiNetworks, isEmpty);
+      expect(controller.wifiScanError, contains('escaneo fallido'));
+    });
+
     test('connect attempts selected Wi-Fi before requiring gateway/interface',
         () async {
       controller.rdpHostCtrl.text = '192.168.1.100';

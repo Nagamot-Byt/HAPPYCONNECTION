@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:medlink_connect/core/connection_workflow_service.dart';
@@ -51,6 +52,24 @@ class HomeController extends ChangeNotifier {
   void _notify() {
     if (!_disposed) notifyListeners();
   }
+
+  bool get _isWifiSupported =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
+  bool get wifiSupported => _isWifiSupported && wifiManager != null;
+
+  bool get rdpProfileSupported =>
+      defaultTargetPlatform == TargetPlatform.windows;
+
+  bool get _supportsRouteChanges =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux ||
+      defaultTargetPlatform == TargetPlatform.android;
+
+  bool get _requiresNetworkConfig =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux;
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -207,7 +226,7 @@ class HomeController extends ChangeNotifier {
 
     // We can run these without awaiting init
     refreshWifiNetworks(silent: true);
-    syncCurrentWifiInfo(silent: true);
+    syncCurrentWifiInfo(silent: true, overwrite: false);
   }
 
   Future<void> _persistSplitTunnelCleanup({
@@ -356,7 +375,7 @@ class HomeController extends ChangeNotifier {
   }
 
   Future<void> refreshWifiNetworks({bool silent = false}) async {
-    if (wifiManager == null) return;
+    if (wifiManager == null || !_isWifiSupported) return;
     if (!silent) {
       _wifiNetworksLoading = true;
       _notify();
@@ -378,17 +397,18 @@ class HomeController extends ChangeNotifier {
     }
   }
 
-  Future<WifiConnectionInfo?> syncCurrentWifiInfo({bool silent = false}) async {
-    if (wifiManager == null) return null;
+  Future<WifiConnectionInfo?> syncCurrentWifiInfo({
+    bool silent = false,
+    bool overwrite = true,
+  }) async {
+    if (wifiManager == null || !_isWifiSupported) return null;
     try {
       final info = await wifiManager!.getCurrentConnectionInfo();
       _currentWifiSsid = info.ssid;
       if (info.ssid.isNotEmpty) {
-        if (info.gateway.trim().isNotEmpty) {
-          gatewayCtrl.text = info.gateway;
-        }
-        if (info.interfaceName.trim().isNotEmpty) {
-          ifaceCtrl.text = info.interfaceName;
+        if (overwrite) {
+          gatewayCtrl.text = info.gateway.trim();
+          ifaceCtrl.text = info.interfaceName.trim();
         }
         if (!silent) {
           log(l10n.logCurrentNetwork(
@@ -457,14 +477,22 @@ class HomeController extends ChangeNotifier {
         if (preset.isConfigured)
           () async {
             try {
-              final ms = await measureTcpPortWithRetry(
+              final result = await measureTcpPortWithRetryDetailed(
                 preset.host,
                 preset.port,
                 label: preset.label,
               );
+              final ms = result.latency;
               if (ms != null && ms > 0) {
                 log(l10n.logServerResponded(preset.label, ms));
                 responses.add(MapEntry(preset, ms));
+              } else {
+                log(
+                  l10n.logServerNoResponse(
+                    preset.label,
+                    result.error ?? 'unknown',
+                  ),
+                );
               }
             } catch (e) {
               log(l10n.logServerNoResponse(preset.label, '$e'));
@@ -591,6 +619,12 @@ class HomeController extends ChangeNotifier {
   }
 
   Future<bool> connectSelectedWifi({required bool requireSelection}) async {
+    if (!wifiSupported) {
+      if (requireSelection) {
+        log(l10n.logWorkflowWifiUnavailable, isError: true);
+      }
+      return false;
+    }
     final rawWifi = resolvedWifiSsid();
     if (rawWifi.isEmpty) {
       if (requireSelection) {
@@ -692,6 +726,19 @@ class HomeController extends ChangeNotifier {
     int port, {
     String? label,
   }) async {
+    final result = await measureTcpPortWithRetryDetailed(
+      host,
+      port,
+      label: label,
+    );
+    return result.latency;
+  }
+
+  Future<({int? latency, String? error})> measureTcpPortWithRetryDetailed(
+    String host,
+    int port, {
+    String? label,
+  }) async {
     const delays = <Duration>[
       Duration.zero,
       Duration(milliseconds: 350),
@@ -699,6 +746,7 @@ class HomeController extends ChangeNotifier {
     ];
 
     int? best;
+    String? lastError;
     for (var attempt = 0; attempt < delays.length; attempt++) {
       final delay = delays[attempt];
       if (delay > Duration.zero) {
@@ -709,7 +757,8 @@ class HomeController extends ChangeNotifier {
         );
         await Future<void>.delayed(delay);
       }
-      final latency = await networkDiagnostics.checkTcpPort(host, port);
+      final probe = await networkDiagnostics.checkTcpPortDetailed(host, port);
+      final latency = probe.value;
       if (latency != null) {
         best = best == null ? latency : (latency < best ? latency : best);
         if (attempt > 0) {
@@ -717,8 +766,9 @@ class HomeController extends ChangeNotifier {
         }
         break;
       }
+      lastError = probe.error;
     }
-    return best;
+    return (latency: best, error: best == null ? lastError : null);
   }
 
   String? _diagnosticTarget() {
@@ -836,36 +886,51 @@ class HomeController extends ChangeNotifier {
 
     try {
       await saveSettings();
-      final wifiInfo = await syncCurrentWifiInfo(silent: true);
-      gateway = gatewayCtrl.text.trim();
-      iface = ifaceCtrl.text.trim();
+      WifiConnectionInfo? wifiInfo;
+      if (_isWifiSupported) {
+        wifiInfo = await syncCurrentWifiInfo(silent: true);
+        gateway = gatewayCtrl.text.trim();
+        iface = ifaceCtrl.text.trim();
+
+        if (wifiInfo == null || wifiInfo.ssid.trim().isEmpty) {
+          log(l10n.logNoActiveWifiError, isError: true);
+          findings.add(l10n.findingNoActiveWifi);
+        } else {
+          log(
+            l10n.logCurrentWifiSummary(
+              wifiInfo.ssid,
+              wifiInfo.interfaceName.isEmpty
+                  ? l10n.valueNotAvailable
+                  : wifiInfo.interfaceName,
+              wifiInfo.gateway.isEmpty
+                  ? l10n.valueNotAvailable
+                  : wifiInfo.gateway,
+            ),
+          );
+        }
+      }
       subnets = parseSubnets();
 
-      if (wifiInfo == null || wifiInfo.ssid.trim().isEmpty) {
-        log(l10n.logNoActiveWifiError, isError: true);
-        findings.add(l10n.findingNoActiveWifi);
-      } else {
-        log(
-          l10n.logCurrentWifiSummary(
-            wifiInfo.ssid,
-            wifiInfo.interfaceName.isEmpty
-                ? l10n.valueNotAvailable
-                : wifiInfo.interfaceName,
-            wifiInfo.gateway.isEmpty
-                ? l10n.valueNotAvailable
-                : wifiInfo.gateway,
-          ),
-        );
+      if (gateway.isEmpty || iface.isEmpty) {
+        try {
+          final info = await routeManager.getPrimaryDefaultRouteInfo();
+          gateway = gateway.isEmpty ? (info['gateway'] ?? '').trim() : gateway;
+          iface = iface.isEmpty ? (info['interfaceName'] ?? '').trim() : iface;
+          if (gateway.isNotEmpty) gatewayCtrl.text = gateway;
+          if (iface.isNotEmpty) ifaceCtrl.text = iface;
+        } catch (_) {}
       }
 
       String? safeGateway;
       String? safeIface;
       if (gateway.isEmpty || iface.isEmpty) {
-        log(
-          l10n.logMissingGatewayInterface,
-          isError: true,
-        );
-        findings.add(l10n.findingMissingGatewayInterface);
+        if (_requiresNetworkConfig) {
+          log(
+            l10n.logMissingGatewayInterface,
+            isError: true,
+          );
+          findings.add(l10n.findingMissingGatewayInterface);
+        }
       } else {
         try {
           safeGateway = InputSanitizer.sanitizeIpv4(
@@ -932,7 +997,10 @@ class HomeController extends ChangeNotifier {
         findings.add(l10n.findingRdpClientUnavailable);
       }
 
-      if (safeSubnets != null && safeGateway != null && safeIface != null) {
+      if (_supportsRouteChanges &&
+          safeSubnets != null &&
+          safeGateway != null &&
+          safeIface != null) {
         final missingRoutes = await routeManager.verifyRoutes(
           hospitalSubnets: safeSubnets,
           gateway: safeGateway,
@@ -1002,14 +1070,9 @@ class HomeController extends ChangeNotifier {
           );
         } else {
           final probeError = networkDiagnostics.lastProbeError;
-          if (probeError != null) {
-            log(
-              l10n.logPingFailed(resolvedHost, probeError),
-              isError: true,
-            );
-          }
           log(
-            l10n.logTcpFailed(resolvedPort, resolvedHost),
+            '${l10n.logTcpFailed(resolvedPort, resolvedHost)}'
+            '${probeError == null ? '' : ' ${l10n.logCauseLabel(probeError)}'}',
             isError: true,
           );
           findings.add(l10n.findingRdpDidNotRespond(resolvedPort));
@@ -1049,7 +1112,7 @@ class HomeController extends ChangeNotifier {
     if (_busy) return;
     final subnets = parseSubnets();
 
-    if (subnets.isEmpty) {
+    if (subnets.isEmpty && _requiresNetworkConfig) {
       log(l10n.logInvalidNoSubnets, isError: true);
       return;
     }
@@ -1076,7 +1139,7 @@ class HomeController extends ChangeNotifier {
       String iface = ifaceCtrl.text.trim();
       final port = parsePort();
 
-      if (host.isEmpty) {
+      if (host.isEmpty && !shouldAutoSelect) {
         log(l10n.logInvalidNoHost, isError: true);
         setGuidance(
           l10n.guidanceMissingRdpServerTitle,
@@ -1089,29 +1152,26 @@ class HomeController extends ChangeNotifier {
         return;
       }
 
-      // Intentar detectar gateway/interfaz si faltan
-      if (gateway.isEmpty || iface.isEmpty) {
+      // Sin un SSID objetivo no hay una conexión posterior que refresque estos
+      // valores, así que se usa la ruta por defecto. Con SSID, el workflow los
+      // obtiene después de conectar para no reutilizar datos de otra red.
+      if (_requiresNetworkConfig &&
+          selectedWifi.isEmpty &&
+          (gateway.isEmpty || iface.isEmpty)) {
         log(l10n.logDetectingGateway);
         try {
-          await syncCurrentWifiInfo(silent: true);
+          final info = await routeManager.getPrimaryDefaultRouteInfo();
+          gateway = gateway.isEmpty ? (info['gateway'] ?? '').trim() : gateway;
+          iface = iface.isEmpty ? (info['interfaceName'] ?? '').trim() : iface;
+          if (gateway.isNotEmpty) gatewayCtrl.text = gateway;
+          if (iface.isNotEmpty) ifaceCtrl.text = iface;
         } catch (_) {}
-        gateway = gatewayCtrl.text.trim();
-        iface = ifaceCtrl.text.trim();
-        if (gateway.isEmpty || iface.isEmpty) {
-          try {
-            final info = await routeManager.getPrimaryDefaultRouteInfo();
-            gateway =
-                gateway.isEmpty ? (info['gateway'] ?? '').trim() : gateway;
-            iface =
-                iface.isEmpty ? (info['interfaceName'] ?? '').trim() : iface;
-            if (gateway.isNotEmpty) gatewayCtrl.text = gateway;
-            if (iface.isNotEmpty) ifaceCtrl.text = iface;
-          } catch (_) {}
-        }
       }
 
-      final canConnectWifi = selectedWifi.isNotEmpty && wifiManager != null;
-      if ((gateway.isEmpty || iface.isEmpty) && !canConnectWifi) {
+      final canConnectWifi = selectedWifi.isNotEmpty && wifiSupported;
+      if (_requiresNetworkConfig &&
+          (gateway.isEmpty || iface.isEmpty) &&
+          !canConnectWifi) {
         log(l10n.logMissingGatewayInterfaceHint, isError: true);
         setGuidance(
           l10n.guidanceMissingNetworkDataTitle,
@@ -1127,17 +1187,19 @@ class HomeController extends ChangeNotifier {
 
       if (_splitTunnelActive) {
         log(l10n.logClosingPreviousTunnel);
-        try {
-          await routeManager.disableSplitTunnel();
-          _splitTunnelActive = false;
+        if (_supportsRouteChanges) {
           try {
-            await settings?.clearPendingSplitTunnelCleanup();
-          } catch (_) {}
-        } catch (e) {
-          log(l10n.logCloseTunnelError('$e'), isError: true);
-          setErrorGuidance(e);
-          return;
+            await routeManager.disableSplitTunnel();
+          } catch (e) {
+            log(l10n.logCloseTunnelError('$e'), isError: true);
+            setErrorGuidance(e);
+            return;
+          }
         }
+        _splitTunnelActive = false;
+        try {
+          await settings?.clearPendingSplitTunnelCleanup();
+        } catch (_) {}
       }
 
       await for (final state in workflowService.connect(
@@ -1225,8 +1287,10 @@ class HomeController extends ChangeNotifier {
     _notify();
     log(l10n.logDisconnecting);
     try {
-      final msg = await routeManager.disableSplitTunnel();
-      log(msg);
+      if (_supportsRouteChanges) {
+        final msg = await routeManager.disableSplitTunnel();
+        log(msg);
+      }
       _splitTunnelActive = false;
       try {
         await settings?.clearPendingSplitTunnelCleanup();
@@ -1263,7 +1327,9 @@ class HomeController extends ChangeNotifier {
         return;
       }
       if (_splitTunnelActive) {
-        await routeManager.disableSplitTunnel();
+        if (_supportsRouteChanges) {
+          await routeManager.disableSplitTunnel();
+        }
         _splitTunnelActive = false;
       }
       await s.clear();

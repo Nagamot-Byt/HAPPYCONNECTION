@@ -99,12 +99,12 @@ fileprivate class NetworkDiagnosticsPlugin {
           default: break
           }
         }
-        queue.asyncAfter(deadline: .now() + 3) {
+        queue.asyncAfter(deadline: .now() + 5) {
           guard !didFire else { return }
           didFire = true
           connection.cancel()
           DispatchQueue.main.async {
-            result(FlutterError(code: "timeout", message: "Prueba TCP \(probePort) agotada 3s", details: nil))
+            result(FlutterError(code: "timeout", message: "Prueba TCP \(probePort) agotada 5s", details: nil))
           }
         }
         connection.start(queue: queue)
@@ -145,7 +145,7 @@ fileprivate class NetworkDiagnosticsPlugin {
             break
           }
         }
-        queue.asyncAfter(deadline: .now() + 2.0) {
+        queue.asyncAfter(deadline: .now() + 5.0) {
           guard !completed else { return }
           completed = true
           connection.cancel()
@@ -202,9 +202,7 @@ fileprivate class RouteManagerPlugin {
            let idx = trackedRoutes.firstIndex(of: dest) {
           trackedRoutes.remove(at: idx)
         }
-        result(FlutterError(code: "requiere_network_extension",
-                            message: "Usa Personal VPN (NEPacketTunnelProvider) para split tunneling real.",
-                            details: nil))
+        result("La ruta no se modifica en iOS sin NetworkExtension; nada que limpiar.")
 
       case "enableSplitTunnel":
         if let args = call.arguments as? [String: Any],
@@ -219,9 +217,7 @@ fileprivate class RouteManagerPlugin {
 
       case "disableSplitTunnel":
         trackedRoutes.removeAll()
-        result(FlutterError(code: "requiere_network_extension",
-                            message: "Split tunnel desactivado (memoria). Implementa NEPacketTunnelProvider.",
-                            details: nil))
+        result("No hay rutas de túnel dividido que limpiar en iOS.")
 
       case "getRoutes":
         // Use getifaddrs / syscall no available for routes; best-effort NWPathMonitor
@@ -255,18 +251,9 @@ fileprivate class RouteManagerPlugin {
         result(out)
 
       case "verifyRoutes":
-        if let args = call.arguments as? [String: Any],
-           let subnets = args["hospitalSubnets"] as? [String] {
-          let expected = subnets
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-          let missing = expected.filter { !trackedRoutes.contains($0) }
-          result(missing)
-        } else {
-          result(FlutterError(code: "argumento_invalido",
-                              message: "Se requieren hospitalSubnets, gateway, interfaceName.",
-                              details: nil))
-        }
+        // Sin NetworkExtension no se pueden aplicar rutas; no hay nada que
+        // verificar en este dispositivo.
+        result([String]())
 
       default:
         result(FlutterMethodNotImplemented)
@@ -312,14 +299,6 @@ fileprivate class RdpLauncherPlugin {
             return
           }
         }
-        // Try known URL scheme prefixes for Jump Desktop, etc
-        let knownSchemes = ["rdp", "rdp2", "jump", "msrdc"]
-        for s in knownSchemes {
-          if let u = URL(string: s + "://"), UIApplication.shared.canOpenURL(u) {
-            result(true)
-            return
-          }
-        }
         result(false)
 
       case "launchRdp":
@@ -351,7 +330,12 @@ fileprivate class RdpLauncherPlugin {
           uri = "rdp://" + authority
         }
 
-        if let url = URL(string: uri) {
+        var candidates = [uri]
+        if !webFeed {
+          candidates.append("ms-rd-web://" + percentEncode(host))
+        }
+        for candidate in candidates {
+          guard let url = URL(string: candidate) else { continue }
           if UIApplication.shared.canOpenURL(url) {
             UIApplication.shared.open(url, options: [:]) { ok in
               if ok {
@@ -363,14 +347,11 @@ fileprivate class RdpLauncherPlugin {
               }
             }
             return
-          } else {
-            result(FlutterError(code: "sin_manejador_rdp",
-                                message: "No hay app que maneje rdp://. Instala MS Remote Desktop.",
-                                details: nil))
           }
-        } else {
-          result(FlutterError(code: "argumento_invalido", message: "URL inválida", details: nil))
         }
+        result(FlutterError(code: "sin_manejador_rdp",
+                            message: "No hay app que maneje rdp:// ni ms-rd-web://. Instala MS Remote Desktop.",
+                            details: nil))
 
       default:
         result(FlutterMethodNotImplemented)

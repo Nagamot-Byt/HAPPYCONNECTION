@@ -184,54 +184,56 @@ class ServerSelectionPanel extends StatelessWidget {
                 ),
               ],
             ),
-            DropdownButtonFormField<String>(
-              value: controller.rdpProfile,
-              isExpanded: true,
-              menuMaxHeight: 240,
-              borderRadius: BorderRadius.circular(12),
-              dropdownColor: Theme.of(context).colorScheme.surface,
-              decoration: InputDecoration(
-                labelText: l10n.rdpProfile,
-                border: const OutlineInputBorder(),
-                isDense: true,
+            if (controller.rdpProfileSupported) ...[
+              DropdownButtonFormField<String>(
+                value: controller.rdpProfile,
+                isExpanded: true,
+                menuMaxHeight: 240,
+                borderRadius: BorderRadius.circular(12),
+                dropdownColor: Theme.of(context).colorScheme.surface,
+                decoration: InputDecoration(
+                  labelText: l10n.rdpProfile,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: [
+                  DropdownMenuItem(
+                    value: 'adaptive',
+                    child: Text(
+                      l10n.profileAdaptive,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'stable',
+                    child: Text(
+                      l10n.profileStable,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'speed',
+                    child: Text(
+                      l10n.profileSpeed,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+                onChanged: controller.busy
+                    ? null
+                    : (value) {
+                        if (value != null) controller.rdpProfile = value;
+                      },
               ),
-              items: [
-                DropdownMenuItem(
-                  value: 'adaptive',
-                  child: Text(
-                    l10n.profileAdaptive,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'stable',
-                  child: Text(
-                    l10n.profileStable,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                DropdownMenuItem(
-                  value: 'speed',
-                  child: Text(
-                    l10n.profileSpeed,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-              onChanged: controller.busy
-                  ? null
-                  : (value) {
-                      if (value != null) controller.rdpProfile = value;
-                    },
-            ),
-            const SizedBox(height: 12),
-            Text(
-              l10n.rdpProfileExplanation,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+              const SizedBox(height: 12),
+              Text(
+                l10n.rdpProfileExplanation,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
           ],
         ),
       ),

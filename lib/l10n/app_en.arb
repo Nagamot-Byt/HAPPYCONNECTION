@@ -271,6 +271,7 @@
   "logWorkflowWifiUnavailable": "Automatic Wi-Fi control is unavailable on this platform; the current network will be used.",
   "logWorkflowNoAutoNetwork": "No gateway/interface was detected automatically. Configured values will be used.",
   "logWorkflowStepPrepare": "Step 1/4 — Preparing the connection\nAggressive network resets are skipped to avoid unnecessary delays and outages.",
+  "logWorkflowNoSubnets": "No subnets are configured; split tunnel will be skipped.",
   "logWorkflowStepTunnel": "Step 2/4 — Enabling split tunnel for {count} subnet(s)",
   "@logWorkflowStepTunnel": {
     "placeholders": {

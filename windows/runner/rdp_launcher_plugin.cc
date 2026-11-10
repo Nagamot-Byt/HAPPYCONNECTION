@@ -247,8 +247,6 @@ static std::unique_ptr<EncodableValue> HandlePreLaunch() {
 // ------------------------------------------------------------------
 static std::unique_ptr<EncodableValue> HandleIsAvailable() {
   if (FileExistsOnPath(L"mstsc")) return std::make_unique<EncodableValue>(true);
-  if (FileExistsOnPath(L"RemoteDesktop"))
-    return std::make_unique<EncodableValue>(true);
   if (UriSchemeRegistered(L"rdp"))
     return std::make_unique<EncodableValue>(true);
   if (UriSchemeRegistered(L"ms-rd-web"))
@@ -407,18 +405,27 @@ static std::unique_ptr<EncodableValue> HandleLaunchRdp(
     }
   }
 
-  HINSTANCE hInst = ShellExecuteW(
-      NULL, L"open", uri.c_str(), NULL, NULL, SW_SHOWNORMAL);
-  const intptr_t hi_val = (intptr_t)hInst;
-  if (hi_val > 32) {
-    return std::make_unique<EncodableValue>(
-        "Conexión RDP lanzada a " + host_u8 + ":" + std::to_string(port) +
-        " correctamente.");
+  std::vector<std::wstring> candidates{uri};
+  if (!use_webfeed) {
+    candidates.push_back(L"ms-rd-web://" + PercentEncode(U8ToW(host_u8)));
+  }
+
+  intptr_t last_code = 0;
+  for (const auto& candidate : candidates) {
+    HINSTANCE hInst = ShellExecuteW(
+        NULL, L"open", candidate.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    const intptr_t hi_val = (intptr_t)hInst;
+    if (hi_val > 32) {
+      return std::make_unique<EncodableValue>(
+          "Conexión RDP lanzada a " + host_u8 + ":" + std::to_string(port) +
+          " correctamente.");
+    }
+    last_code = hi_val;
   }
 
   const std::string msg =
       "No se pudo lanzar el cliente RDP. El manejador URI devolvió código " +
-      std::to_string((int)hi_val);
+      std::to_string((int)last_code);
   return std::make_unique<EncodableValue>(
       ErrPair("lanzamiento_fallido", msg));
 }

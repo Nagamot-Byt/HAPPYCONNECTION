@@ -57,10 +57,101 @@ static std::wstring XmlEscape(const std::wstring& s) {
   return out;
 }
 
-static std::wstring BuildWpa2ProfileXml(const std::wstring& ssid,
-                                        const std::wstring& password) {
+struct WifiSecurity {
+  bool found = false;
+  DOT11_AUTH_ALGORITHM auth = DOT11_AUTH_ALGO_RSNA_PSK;
+  DOT11_CIPHER_ALGORITHM cipher = DOT11_CIPHER_ALGO_CCMP;
+  bool is_open = false;
+  bool is_psk = true;
+  bool is_enterprise = false;
+  bool is_wep = false;
+};
+
+static WifiSecurity DetectSecurity(HANDLE client, const GUID& interface_guid,
+                                   const std::string& ssid) {
+  WifiSecurity security;
+  PWLAN_AVAILABLE_NETWORK_LIST networks = nullptr;
+  if (WlanGetAvailableNetworkList(client, &interface_guid, 0, nullptr,
+                                  &networks) != ERROR_SUCCESS) {
+    return security;
+  }
+
+  for (DWORD i = 0; i < networks->dwNumberOfItems; ++i) {
+    const auto& network = networks->Network[i];
+    if (network.dot11Ssid.uSSIDLength == 0) continue;
+    const std::string candidate(
+        reinterpret_cast<const char*>(network.dot11Ssid.ucSSID),
+        network.dot11Ssid.uSSIDLength);
+    if (candidate != ssid) continue;
+
+    security.found = true;
+    security.auth = network.dot11DefaultAuthAlgorithm;
+    security.cipher = network.dot11DefaultCipherAlgorithm;
+    security.is_open =
+        security.auth == DOT11_AUTH_ALGO_80211_OPEN &&
+        security.cipher == DOT11_CIPHER_ALGO_NONE;
+    security.is_wep =
+        security.auth == DOT11_AUTH_ALGO_80211_OPEN &&
+        security.cipher == DOT11_CIPHER_ALGO_WEP;
+    security.is_enterprise =
+        security.auth == DOT11_AUTH_ALGO_RSNA ||
+        security.auth == DOT11_AUTH_ALGO_WPA ||
+        security.auth == DOT11_AUTH_ALGO_WPA3 ||
+        security.auth == DOT11_AUTH_ALGO_WPA3_ENT_192;
+    security.is_psk =
+        !security.is_enterprise && !security.is_open && !security.is_wep;
+    break;
+  }
+
+  WlanFreeMemory(networks);
+  return security;
+}
+
+static bool ProfileExists(HANDLE client, const GUID& interface_guid,
+                          const std::wstring& ssid) {
+  LPWSTR profile_xml = nullptr;
+  DWORD flags = 0;
+  DWORD reason = 0;
+  const DWORD status =
+      WlanGetProfile(client, &interface_guid, ssid.c_str(), nullptr,
+                     &profile_xml, &flags, &reason);
+  if (profile_xml) WlanFreeMemory(profile_xml);
+  return status == ERROR_SUCCESS;
+}
+
+static const wchar_t* AuthName(DOT11_AUTH_ALGORITHM auth) {
+  switch (auth) {
+    case DOT11_AUTH_ALGO_WPA_PSK:
+      return L"WPAPSK";
+    case DOT11_AUTH_ALGO_WPA3_SAE:
+      return L"WPA3SAE";
+    case DOT11_AUTH_ALGO_WPA3_ENT_192:
+      return L"WPA3ENT192";
+    case DOT11_AUTH_ALGO_RSNA_PSK:
+      return L"WPA2PSK";
+    default:
+      return L"WPA2PSK";
+  }
+}
+
+static const wchar_t* CipherName(DOT11_CIPHER_ALGORITHM cipher,
+                                 DOT11_AUTH_ALGORITHM auth) {
+  if (auth == DOT11_AUTH_ALGO_WPA3_ENT_192) return L"GCMP256";
+  if (auth == DOT11_AUTH_ALGO_WPA3_SAE) return L"GCMP256";
+  if (auth == DOT11_AUTH_ALGO_WPA_PSK) return L"TKIP";
+  if (cipher == DOT11_CIPHER_ALGO_GCMP_256) return L"GCMP256";
+  if (cipher == DOT11_CIPHER_ALGO_GCMP) return L"GCMP";
+  return L"AES";
+}
+
+static std::wstring BuildProfileXml(const std::wstring& ssid,
+                                    const std::wstring& password,
+                                    DOT11_AUTH_ALGORITHM auth,
+                                    DOT11_CIPHER_ALGORITHM cipher) {
   const auto ssid_xml = XmlEscape(ssid);
   const auto password_xml = XmlEscape(password);
+  const std::wstring auth_name = AuthName(auth);
+  const std::wstring cipher_name = CipherName(cipher, auth);
   return LR"(<?xml version="1.0"?>)"
       L"\n<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">"
       L"\n  <name>" + ssid_xml + L"</name>"
@@ -74,8 +165,8 @@ static std::wstring BuildWpa2ProfileXml(const std::wstring& ssid,
       L"\n  <MSM>"
       L"\n    <security>"
       L"\n      <authEncryption>"
-      L"\n        <authentication>WPA2PSK</authentication>"
-      L"\n        <encryption>AES</encryption>"
+      L"\n        <authentication>" + auth_name + L"</authentication>"
+      L"\n        <encryption>" + cipher_name + L"</encryption>"
       L"\n        <useOneX>false</useOneX>"
       L"\n      </authEncryption>"
       L"\n      <sharedKey>"
@@ -86,6 +177,44 @@ static std::wstring BuildWpa2ProfileXml(const std::wstring& ssid,
       L"\n    </security>"
       L"\n  </MSM>"
       L"\n</WLANProfile>\n";
+}
+
+static std::wstring BuildOpenProfileXml(const std::wstring& ssid) {
+  const auto ssid_xml = XmlEscape(ssid);
+  return LR"(<?xml version="1.0"?>)"
+      L"\n<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">"
+      L"\n  <name>" + ssid_xml + L"</name>"
+      L"\n  <SSIDConfig>"
+      L"\n    <SSID>"
+      L"\n      <name>" + ssid_xml + L"</name>"
+      L"\n    </SSID>"
+      L"\n  </SSIDConfig>"
+      L"\n  <connectionType>ESS</connectionType>"
+      L"\n  <connectionMode>auto</connectionMode>"
+      L"\n  <MSM>"
+      L"\n    <security>"
+      L"\n      <authEncryption>"
+      L"\n        <authentication>open</authentication>"
+      L"\n        <encryption>none</encryption>"
+      L"\n        <useOneX>false</useOneX>"
+      L"\n      </authEncryption>"
+      L"\n    </security>"
+      L"\n  </MSM>"
+      L"\n</WLANProfile>\n";
+}
+
+static DWORD SetWlanProfile(HANDLE client, const GUID& interface_guid,
+                            const std::wstring& profile_xml, bool overwrite,
+                            DWORD* reason_code) {
+  DWORD status = WlanSetProfile(client, &interface_guid, 0,
+                                profile_xml.c_str(), nullptr, overwrite, nullptr,
+                                reason_code);
+  if (status == ERROR_ACCESS_DENIED) {
+    status = WlanSetProfile(client, &interface_guid, WLAN_PROFILE_USER,
+                            profile_xml.c_str(), nullptr, overwrite, nullptr,
+                            reason_code);
+  }
+  return status;
 }
 
 // ------------------------------------------------------------------
@@ -125,6 +254,13 @@ static std::wstring InterfaceAliasFromGuid(const GUID& guid) {
 }
 
 static std::string DefaultGatewayForLuid(NET_LUID luid) {
+  MIB_IPINTERFACE_ROW interface_row;
+  InitializeIpInterfaceEntry(&interface_row);
+  interface_row.InterfaceLuid = luid;
+  interface_row.Family = AF_INET;
+  if (GetIpInterfaceEntry(&interface_row) != NO_ERROR) return "";
+  if (!interface_row.Connected || interface_row.DisableDefaultRoutes) return "";
+
   PMIB_IPFORWARD_TABLE2 table = nullptr;
   if (GetIpForwardTable2(AF_INET, &table) != NO_ERROR) return "";
 
@@ -301,46 +437,86 @@ static void HandleConnect(const EncodableValue* args, MethodResultPtr result) {
     WlanFreeMemory(pIfList);
 
     std::wstring profile_note;
-    std::wstring wssid = U8ToW(ssid);
+    const std::wstring wssid = U8ToW(ssid);
+    const WifiSecurity security =
+        DetectSecurity(wlan.get(), interfaceGuid, ssid);
+    const bool profile_exists =
+        ProfileExists(wlan.get(), interfaceGuid, wssid);
 
-    if (!password.empty()) {
-      std::wstring profileXml = BuildWpa2ProfileXml(wssid, U8ToW(password));
-      DWORD reasonCode = 0;
-      const DWORD setProfileResult =
-          WlanSetProfile(wlan.get(), &interfaceGuid, 0, profileXml.c_str(),
-                         NULL, FALSE, NULL, &reasonCode);
-      if (setProfileResult != ERROR_SUCCESS) {
-        if (setProfileResult == ERROR_ALREADY_EXISTS) {
-          profile_note = L"Ya existía un perfil Wi-Fi para \"" + wssid + L"\". Se reutilizará el perfil guardado.";
-        } else {
-          profile_note = L"No se pudo actualizar el perfil Wi-Fi (código " + std::to_wstring(reasonCode) + L"). Se intentará conectar con perfil existente.";
+    if (security.found && !security.is_psk && !security.is_open) {
+      if (!profile_exists) {
+        res->Error(
+            "seguridad_no_soportada",
+            security.is_enterprise
+                ? "La red requiere autenticación empresarial (802.1X). "
+                  "Configúrala desde Windows antes de conectar."
+                : "El tipo de seguridad de esta red no se puede configurar "
+                  "automáticamente.");
+        return;
+      }
+      profile_note = L"Se usará el perfil de seguridad existente.";
+    } else if (!password.empty()) {
+      if (!security.found && profile_exists) {
+        profile_note =
+            L"No se pudo determinar la seguridad de la red; se usará el "
+            L"perfil existente.";
+      } else {
+        const std::wstring profileXml = BuildProfileXml(
+            wssid, U8ToW(password), security.auth, security.cipher);
+        DWORD reasonCode = 0;
+        const DWORD setProfileResult = SetWlanProfile(
+            wlan.get(), interfaceGuid, profileXml, profile_exists,
+            &reasonCode);
+        if (setProfileResult != ERROR_SUCCESS) {
+          profile_note =
+              L"No se pudo actualizar el perfil Wi-Fi (código " +
+              std::to_wstring(reasonCode) +
+              L"). Se intentará conectar con perfil existente.";
         }
       }
     } else {
-      // Red abierta: crear perfil abierto explícito si es posible
-      std::wstring openXml = LR"(<?xml version="1.0"?>)"
-          L"\n<WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\">"
-          L"\n  <name>" + XmlEscape(wssid) + L"</name>"
-          L"\n  <SSIDConfig>"
-          L"\n    <SSID>"
-          L"\n      <name>" + XmlEscape(wssid) + L"</name>"
-          L"\n    </SSID>"
-          L"\n  </SSIDConfig>"
-          L"\n  <connectionType>ESS</connectionType>"
-          L"\n  <connectionMode>auto</connectionMode>"
-          L"\n  <MSM>"
-          L"\n    <security>"
-          L"\n      <authEncryption>"
-          L"\n        <authentication>open</authentication>"
-          L"\n        <encryption>none</encryption>"
-          L"\n        <useOneX>false</useOneX>"
-          L"\n      </authEncryption>"
-          L"\n    </security>"
-          L"\n  </MSM>"
-          L"\n</WLANProfile>\n";
-      DWORD reasonCodeOpen = 0;
-      WlanSetProfile(wlan.get(), &interfaceGuid, 0, openXml.c_str(), NULL, FALSE, NULL, &reasonCodeOpen);
-      profile_note = L"Red abierta. Se intentará conectar sin credenciales.";
+      if (security.found && !security.is_open) {
+        if (!profile_exists) {
+          res->Error(
+              "password_requerida",
+              "Esta red Wi-Fi requiere contraseña. Introdúcela para "
+              "conectar.");
+          return;
+        }
+        profile_note = L"Red protegida. Se usará el perfil guardado.";
+      } else if (security.found && security.is_open) {
+        if (!profile_exists) {
+          DWORD reasonCodeOpen = 0;
+          const DWORD openResult = SetWlanProfile(
+              wlan.get(), interfaceGuid, BuildOpenProfileXml(wssid), false,
+              &reasonCodeOpen);
+          if (openResult != ERROR_SUCCESS &&
+              openResult != ERROR_ALREADY_EXISTS) {
+            profile_note =
+                L"No se pudo crear el perfil de red abierta (código " +
+                std::to_wstring(reasonCodeOpen) +
+                L"). Se intentará conectar sin credenciales.";
+          } else {
+            profile_note =
+                L"Red abierta. Se intentará conectar sin credenciales.";
+          }
+        } else {
+          profile_note =
+              L"Red abierta. Se usará el perfil existente sin "
+              L"sobrescribirlo.";
+        }
+      } else {
+        if (!profile_exists) {
+          res->Error(
+              "password_requerida",
+              "No se pudo determinar la seguridad de esta red. Introduce la "
+              "contraseña para continuar.");
+          return;
+        }
+        profile_note =
+            L"No se pudo determinar la seguridad de la red; se usará el "
+            L"perfil existente.";
+      }
     }
 
     WLAN_CONNECTION_PARAMETERS connParams = {0};
@@ -362,7 +538,7 @@ static void HandleConnect(const EncodableValue* args, MethodResultPtr result) {
       connParams.wlanConnectionMode = wlan_connection_mode_discovery_unsecure;
       connParams.strProfile = NULL;
       connParams.pDot11Ssid = &dot11Ssid;
-      connParams.dwFlags = WLAN_CONNECTION_HIDDEN_NETWORK;
+      connParams.dwFlags = 0;
       connectResult = WlanConnect(wlan.get(), &interfaceGuid, &connParams, NULL);
       if (connectResult != ERROR_SUCCESS) {
         res->Error("error_wifi", "No se pudo iniciar la conexión Wi-Fi. Error: " + std::to_string(connectResult));

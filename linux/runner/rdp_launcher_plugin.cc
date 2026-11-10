@@ -104,6 +104,13 @@ FlMethodResponse* handle_launch_rdp(FlValue* args) {
   if (web_val && fl_value_get_type(web_val) == FL_VALUE_TYPE_BOOL) {
     use_web = fl_value_get_bool(web_val);
   }
+  if (!use_web && !scheme_handler_exists("rdp") &&
+      scheme_handler_exists("ms-rd-web")) {
+    use_web = TRUE;
+  } else if (use_web && !scheme_handler_exists("ms-rd-web") &&
+             scheme_handler_exists("rdp")) {
+    use_web = FALSE;
+  }
 
   g_autofree gchar* encoded_host =
       g_uri_escape_string(host, nullptr, FALSE);
@@ -147,9 +154,8 @@ FlMethodResponse* handle_launch_rdp(FlValue* args) {
 }
 
 FlMethodResponse* handle_is_rdp_client_available() {
-  if (binary_in_path("remmina") || binary_in_path("xfreerdp") ||
-      binary_in_path("mstsc") || scheme_handler_exists("rdp") ||
-      scheme_handler_exists("ms-rd-web")) {
+  if (binary_in_path("xdg-open") &&
+      (scheme_handler_exists("rdp") || scheme_handler_exists("ms-rd-web"))) {
     return FL_METHOD_RESPONSE(
         fl_method_success_response_new(fl_value_new_bool(TRUE)));
   }

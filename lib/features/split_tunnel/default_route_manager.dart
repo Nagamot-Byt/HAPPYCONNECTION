@@ -27,43 +27,38 @@ class DefaultRouteManager implements RouteManager {
         : RouteConfigurationException(detail);
   }
 
-  bool _isValidIpv4(String ip) {
-    try {
-      InputSanitizer.sanitizeIpv4(ip);
-      return true;
-    } on ArgumentError {
-      return false;
-    }
-  }
-
-  bool _isValidCidr(String cidr) {
-    try {
-      InputSanitizer.sanitizeCidr(cidr);
-      return true;
-    } on ArgumentError {
-      return false;
-    }
-  }
-
   @override
   Future<String> addRoute({
     required String destinationCidr,
     required String gateway,
     required String interfaceName,
   }) async {
-    if (!_isValidCidr(destinationCidr)) {
-      throw const RouteConfigurationException(
-          'Validación fallida: destinationCidr no es un formato válido IPv4/CIDR.');
-    }
-    if (!_isValidIpv4(gateway)) {
-      throw const RouteConfigurationException(
-          'Validación fallida: gateway no es una IP válida.');
+    final String sanitizedCidr;
+    final String sanitizedGateway;
+    final String sanitizedIface;
+    try {
+      sanitizedCidr = InputSanitizer.sanitizeCidr(
+        destinationCidr,
+        fieldName: 'destinationCidr',
+      );
+      sanitizedGateway = InputSanitizer.sanitizeIpv4(
+        gateway,
+        fieldName: 'gateway',
+      );
+      sanitizedIface = InputSanitizer.sanitizeInterfaceName(
+        interfaceName,
+        fieldName: 'interfaceName',
+      );
+    } on ArgumentError catch (e) {
+      throw RouteConfigurationException(
+        'Route validation failed: ${e.message}',
+      );
     }
     try {
       final result = await _channel.invokeMethod<String>('addRoute', {
-        'destinationCidr': destinationCidr,
-        'gateway': gateway,
-        'interfaceName': interfaceName,
+        'destinationCidr': sanitizedCidr,
+        'gateway': sanitizedGateway,
+        'interfaceName': sanitizedIface,
       });
       return result ?? 'Route added.';
     } on PlatformException catch (e) {
@@ -78,25 +73,42 @@ class DefaultRouteManager implements RouteManager {
     String? gateway,
     String? interfaceName,
   }) async {
-    if (!_isValidCidr(destinationCidr)) {
-      throw const RouteConfigurationException(
-          'Validación fallida: destinationCidr no es un formato válido IPv4/CIDR.');
-    }
-    final hasGateway = gateway != null && gateway.isNotEmpty;
-    final hasInterface = interfaceName != null && interfaceName.isNotEmpty;
+    final bool hasGateway = gateway != null && gateway.isNotEmpty;
+    final bool hasInterface = interfaceName != null && interfaceName.isNotEmpty;
     if (hasGateway != hasInterface) {
       throw const RouteConfigurationException(
-          'Para limpiar una ruta exacta se requieren gateway e interfaz.');
+          'An exact route cleanup requires both gateway and interface.');
     }
-    if (hasGateway && !_isValidIpv4(gateway)) {
-      throw const RouteConfigurationException(
-          'Validación fallida: gateway no es una IP válida.');
+    final String sanitizedCidr;
+    String? sanitizedGateway;
+    String? sanitizedIface;
+    try {
+      sanitizedCidr = InputSanitizer.sanitizeCidr(
+        destinationCidr,
+        fieldName: 'destinationCidr',
+      );
+      if (hasGateway) {
+        sanitizedGateway = InputSanitizer.sanitizeIpv4(
+          gateway,
+          fieldName: 'gateway',
+        );
+      }
+      if (hasInterface) {
+        sanitizedIface = InputSanitizer.sanitizeInterfaceName(
+          interfaceName,
+          fieldName: 'interfaceName',
+        );
+      }
+    } on ArgumentError catch (e) {
+      throw RouteConfigurationException(
+        'Route validation failed: ${e.message}',
+      );
     }
     try {
       final result = await _channel.invokeMethod<String>('removeRoute', {
-        'destinationCidr': destinationCidr,
-        if (hasGateway) 'gateway': gateway,
-        if (hasInterface) 'interfaceName': interfaceName,
+        'destinationCidr': sanitizedCidr,
+        if (hasGateway) 'gateway': sanitizedGateway,
+        if (hasInterface) 'interfaceName': sanitizedIface,
       });
       return result ?? 'Route removed.';
     } on PlatformException catch (e) {
@@ -111,21 +123,33 @@ class DefaultRouteManager implements RouteManager {
     required String gateway,
     required String interfaceName,
   }) async {
-    for (final subnet in hospitalSubnets) {
-      if (!_isValidCidr(subnet)) {
-        throw RouteConfigurationException(
-            'Validación fallida: la subred $subnet no es un formato válido IPv4/CIDR.');
-      }
-    }
-    if (!_isValidIpv4(gateway)) {
-      throw const RouteConfigurationException(
-          'Validación fallida: gateway no es una IP válida.');
+    final List<String> sanitizedSubnets;
+    final String sanitizedGateway;
+    final String sanitizedIface;
+    try {
+      sanitizedSubnets = InputSanitizer.sanitizeSubnets(
+        hospitalSubnets,
+        fieldName: 'hospitalSubnets',
+        allowEmpty: true,
+      );
+      sanitizedGateway = InputSanitizer.sanitizeIpv4(
+        gateway,
+        fieldName: 'gateway',
+      );
+      sanitizedIface = InputSanitizer.sanitizeInterfaceName(
+        interfaceName,
+        fieldName: 'interfaceName',
+      );
+    } on ArgumentError catch (e) {
+      throw RouteConfigurationException(
+        'Route validation failed: ${e.message}',
+      );
     }
     try {
       final result = await _channel.invokeMethod<String>('enableSplitTunnel', {
-        'hospitalSubnets': hospitalSubnets,
-        'gateway': gateway,
-        'interfaceName': interfaceName,
+        'hospitalSubnets': sanitizedSubnets,
+        'gateway': sanitizedGateway,
+        'interfaceName': sanitizedIface,
       });
       return result ?? 'Split tunnel enabled.';
     } on PlatformException catch (e) {
@@ -204,19 +228,19 @@ class DefaultRouteManager implements RouteManager {
     try {
       sanitizedSubnets = InputSanitizer.sanitizeSubnets(
         hospitalSubnets,
-        fieldName: 'Subredes',
+        fieldName: 'subnets',
       );
       sanitizedGateway = InputSanitizer.sanitizeIpv4(
         gateway,
-        fieldName: 'Puerta de enlace',
+        fieldName: 'gateway',
       );
       sanitizedIface = InputSanitizer.sanitizeInterfaceName(
         interfaceName,
-        fieldName: 'Interfaz',
+        fieldName: 'interfaceName',
       );
     } on ArgumentError catch (e) {
       throw RouteConfigurationException(
-        'Validación fallida al verificar rutas: ${e.message}',
+        'Route verification failed: ${e.message}',
       );
     }
     try {

@@ -14,6 +14,8 @@ class DefaultRdpLauncher implements RdpLauncher {
     try {
       final result = await _channel.invokeMethod<bool>('preLaunch');
       return result ?? false;
+    } on MissingPluginException {
+      return false;
     } on PlatformException {
       return false;
     }
@@ -24,6 +26,8 @@ class DefaultRdpLauncher implements RdpLauncher {
     try {
       final result = await _channel.invokeMethod<bool>('isRdpClientAvailable');
       return result ?? false;
+    } on MissingPluginException {
+      return false;
     } on PlatformException {
       return false;
     }
@@ -58,6 +62,10 @@ class DefaultRdpLauncher implements RdpLauncher {
         'measuredLatencyMs': measuredLatencyMs,
       });
       return result ?? 'Conexión RDP lanzada exitosamente.';
+    } on MissingPluginException {
+      throw const RdpLaunchException(
+        'El lanzador RDP no está disponible en esta plataforma.',
+      );
     } on PlatformException catch (e) {
       final message =
           e.message?.isNotEmpty == true ? e.message! : 'Error desconocido';

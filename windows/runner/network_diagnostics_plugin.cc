@@ -8,6 +8,7 @@
 #include <flutter/standard_method_codec.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <algorithm>
 #include <any>
 #include <cctype>
 #include <string>
@@ -148,7 +149,7 @@ static void HandlePing(const std::string& host, MethodResultPtr result) {
     }
 
     DWORD dwRetVal = IcmpSendEcho(hIcmpFile, ip, SendData, sizeof(SendData),
-                                  nullptr, ReplyBuffer, ReplySize, 1200);
+                                  nullptr, ReplyBuffer, ReplySize, 2000);
 
     if (dwRetVal != 0) {
       PICMP_ECHO_REPLY pEchoReply = (PICMP_ECHO_REPLY)ReplyBuffer;
@@ -204,8 +205,15 @@ static void HandleCheckTcpPort(
     }
 
     int best_time_ms = -1;
+    const ULONGLONG global_deadline = GetTickCount64() + 9000;
     for (addrinfo* current = addresses; current != nullptr;
          current = current->ai_next) {
+      const ULONGLONG now = GetTickCount64();
+      if (now >= global_deadline) break;
+      const int remaining_ms =
+          static_cast<int>(global_deadline - now);
+      const int address_timeout_ms = std::min(remaining_ms, 4000);
+
       SOCKET sock =
           socket(current->ai_family, current->ai_socktype, current->ai_protocol);
       if (sock == INVALID_SOCKET) {
@@ -227,8 +235,8 @@ static void HandleCheckTcpPort(
           FD_SET(sock, &write_set);
 
           timeval timeout{};
-          timeout.tv_sec = 1;
-          timeout.tv_usec = 500000;
+          timeout.tv_sec = address_timeout_ms / 1000;
+          timeout.tv_usec = (address_timeout_ms % 1000) * 1000;
 
           const int select_res =
               select(0, nullptr, &write_set, nullptr, &timeout);

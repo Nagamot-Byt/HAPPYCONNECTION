@@ -15,6 +15,7 @@
 #include "async_method_call.h"
 #include "process_utils.h"
 
+#include <algorithm>
 #include <string>
 
 /* ------------------------------------------------------------------ */
@@ -179,7 +180,14 @@ static FlMethodResponse* handle_check_tcp_port(const gchar* host, gint port) {
   }
 
   gint elapsed_ms = -1;
+  const gint64 global_deadline_us = g_get_monotonic_time() + 9000000;
   for (struct addrinfo* rp = result; rp != NULL; rp = rp->ai_next) {
+    const gint64 now_us = g_get_monotonic_time();
+    if (now_us >= global_deadline_us) break;
+    const gint remaining_ms =
+        static_cast<gint>((global_deadline_us - now_us) / 1000);
+    const gint address_timeout_ms = std::min(remaining_ms, 4000);
+
     int fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
     if (fd < 0) continue;
 
@@ -200,8 +208,8 @@ static FlMethodResponse* handle_check_tcp_port(const gchar* host, gint port) {
       FD_ZERO(&writefds);
       FD_SET(fd, &writefds);
       struct timeval timeout;
-      timeout.tv_sec = 1;
-      timeout.tv_usec = 500000;
+      timeout.tv_sec = address_timeout_ms / 1000;
+      timeout.tv_usec = (address_timeout_ms % 1000) * 1000;
       int sel = select(fd + 1, NULL, &writefds, NULL, &timeout);
       if (sel > 0 && FD_ISSET(fd, &writefds)) {
         int so_error = 0;

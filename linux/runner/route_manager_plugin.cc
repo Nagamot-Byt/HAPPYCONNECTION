@@ -38,7 +38,7 @@ void free_tracked_route(gpointer data) {
 
 std::vector<std::string> split_route_line(const gchar* line) {
   std::vector<std::string> tokens;
-  gchar** parts = g_strsplit_set(line, " \t", -1);
+  gchar** parts = g_strsplit_set(line, " \t\r\n", -1);
   for (gchar** part = parts; part && *part; ++part) {
     if (**part) tokens.emplace_back(*part);
   }
@@ -46,12 +46,32 @@ std::vector<std::string> split_route_line(const gchar* line) {
   return tokens;
 }
 
+std::string strip_host_prefix(const std::string& value) {
+  if (value.size() > 3 &&
+      value.compare(value.size() - 3, 3, "/32") == 0) {
+    return value.substr(0, value.size() - 3);
+  }
+  return value;
+}
+
+bool destination_matches(const std::string& token,
+                         const std::string& destination) {
+  return strip_host_prefix(token) == strip_host_prefix(destination);
+}
+
+bool is_default_route(const std::string& destination) {
+  const auto pos = destination.find('/');
+  return pos != std::string::npos && destination.substr(pos + 1) == "0";
+}
+
 bool route_line_matches(const gchar* line,
                         const std::string& destination,
                         const std::string& gateway,
                         const std::string& interface_name) {
   const auto tokens = split_route_line(line);
-  if (tokens.empty() || tokens.front() != destination) return false;
+  if (tokens.empty() || !destination_matches(tokens.front(), destination)) {
+    return false;
+  }
 
   bool has_gateway = false;
   bool has_interface = false;
@@ -73,12 +93,74 @@ bool route_exists(const std::string& destination,
   gint exit_code = 0;
   const gboolean ran = run_program({"ip", "route", "show", destination}, &out,
                                    &err, &exit_code);
-  const bool found = ran && exit_code == 0 && out &&
-                     route_line_matches(out, destination, gateway,
-                                        interface_name);
+  bool found = false;
+  if (ran && exit_code == 0 && out) {
+    gchar** lines = g_strsplit(out, "\n", -1);
+    for (gchar** line = lines; line && *line; ++line) {
+      if (route_line_matches(*line, destination, gateway, interface_name)) {
+        found = true;
+        break;
+      }
+    }
+    g_strfreev(lines);
+  }
   g_free(out);
   g_free(err);
   return found;
+}
+
+bool route_exists_any(const std::string& destination) {
+  gchar* out = nullptr;
+  gchar* err = nullptr;
+  gint exit_code = 0;
+  const gboolean ran = run_program({"ip", "route", "show", destination}, &out,
+                                   &err, &exit_code);
+  bool found = false;
+  if (ran && exit_code == 0 && out) {
+    gchar** lines = g_strsplit(out, "\n", -1);
+    for (gchar** line = lines; line && *line; ++line) {
+      const auto tokens = split_route_line(*line);
+      if (!tokens.empty() &&
+          destination_matches(tokens.front(), destination)) {
+        found = true;
+        break;
+      }
+    }
+    g_strfreev(lines);
+  }
+  g_free(out);
+  g_free(err);
+  return found;
+}
+
+bool delete_route_exact(const std::string& destination,
+                        const std::string& gateway,
+                        const std::string& interface_name);
+
+bool remove_tracked_for_destination(const std::string& destination) {
+  MutexLock lock(&g_routes_mutex);
+  GList* remaining = nullptr;
+  GList* removed = nullptr;
+  for (GList* item = g_tracked_routes; item; item = item->next) {
+    auto* route = static_cast<TrackedRoute*>(item->data);
+    if (route->destination != destination) {
+      remaining = g_list_prepend(remaining, route);
+      continue;
+    }
+    if (delete_route_exact(route->destination, route->gateway,
+                           route->interface_name) ||
+        !route_exists(route->destination, route->gateway,
+                      route->interface_name)) {
+      removed = g_list_prepend(removed, route);
+    } else {
+      remaining = g_list_prepend(remaining, route);
+    }
+  }
+  const bool removed_any = removed != nullptr;
+  g_list_free(g_tracked_routes);
+  g_tracked_routes = remaining;
+  g_list_free_full(removed, free_tracked_route);
+  return removed_any;
 }
 
 bool delete_route_exact(const std::string& destination,
@@ -140,9 +222,21 @@ FlMethodResponse* handle_add_route(const gchar* dest,
     return error_response("argumento_invalido",
                           "Los parámetros contienen caracteres inválidos.");
   }
+  if (is_default_route(dest)) {
+    return error_response("argumento_invalido",
+                          "No se permite agregar la ruta por defecto /0.");
+  }
 
   if (route_exists(dest, gw, iface)) {
     return success_string("La ruta ya existe para la interfaz indicada.");
+  }
+
+  remove_tracked_for_destination(dest);
+  if (route_exists_any(dest)) {
+    return error_response(
+        "conflicto_ruta",
+        std::string("Ya existe una ruta para ") + dest +
+            " en otra interfaz. Revísala antes de continuar.");
   }
 
   gchar* out = nullptr;
@@ -248,15 +342,36 @@ FlMethodResponse* handle_enable_split_tunnel(
                           "Gateway o interfaz inválidos.");
   }
 
-  std::vector<TrackedRoute> added_now;
-
+  std::vector<std::string> pending;
   for (const auto& dest : subnets) {
     if (dest.empty() || has_invalid_chars(dest.c_str())) {
       return error_response("argumento_invalido", "Subred inválida.");
     }
+    if (is_default_route(dest)) {
+      return error_response("argumento_invalido",
+                            "No se permite agregar la ruta por defecto /0.");
+    }
+    if (!route_exists(dest, gateway, interface_name)) {
+      pending.push_back(dest);
+    }
+  }
 
-    if (route_exists(dest, gateway, interface_name)) {
-      continue;
+  if (pending.empty()) {
+    return success_string("Las rutas del túnel dividido ya existen.");
+  }
+
+  std::vector<TrackedRoute> added_now;
+  for (const auto& dest : pending) {
+    remove_tracked_for_destination(dest);
+    if (route_exists_any(dest)) {
+      for (const auto& previous : added_now) {
+        delete_route_exact(previous.destination, previous.gateway,
+                           previous.interface_name);
+      }
+      return error_response(
+          "conflicto_ruta",
+          std::string("Ya existe una ruta para ") + dest +
+              " en otra interfaz. Revísala antes de continuar.");
     }
 
     gchar* out = nullptr;
@@ -388,6 +503,7 @@ FlMethodResponse* handle_get_primary_default_route_info() {
       std::string interface_name;
       std::string metric;
       guint64 metric_value = 0;
+      bool link_down = false;
       for (size_t i = 0; i + 1 < tokens.size(); ++i) {
         if (tokens[i] == "via") {
           gateway = tokens[i + 1];
@@ -398,7 +514,14 @@ FlMethodResponse* handle_get_primary_default_route_info() {
           metric_value = g_ascii_strtoull(metric.c_str(), nullptr, 10);
         }
       }
+      for (const auto& token : tokens) {
+        if (token == "linkdown") {
+          link_down = true;
+          break;
+        }
+      }
       if (gateway.empty() || interface_name.empty()) continue;
+      if (interface_name == "lo" || link_down) continue;
       if (metric_value < best_metric_value) {
         best_metric_value = metric_value;
         best_gateway = gateway;
@@ -456,39 +579,13 @@ FlMethodResponse* handle_verify_routes(
     const std::vector<std::string>& subnets,
     const std::string& gateway,
     const std::string& interface_name) {
-  gchar* out = nullptr;
-  gchar* err = nullptr;
-  gint exit_code = 0;
-  const gboolean ran =
-      run_program({"ip", "route", "show"}, &out, &err, &exit_code);
-  if (!ran || exit_code != 0) {
-    const std::string detail = err && *err ? err : "desconocido";
-    g_free(out);
-    g_free(err);
-    return error_response("error_comando",
-                          "No se pudieron verificar las rutas: " + detail);
-  }
-
   g_autoptr(FlValue) missing = fl_value_new_list();
-  gchar** lines = out ? g_strsplit(out, "\n", -1) : nullptr;
   for (const auto& subnet : subnets) {
     if (subnet.empty()) continue;
-
-    bool present = false;
-    for (gchar** line = lines; line && *line; ++line) {
-      if (route_line_matches(*line, subnet, gateway, interface_name)) {
-        present = true;
-        break;
-      }
-    }
-    if (!present) {
+    if (!route_exists(subnet, gateway, interface_name)) {
       fl_value_append_take(missing, fl_value_new_string(subnet.c_str()));
     }
   }
-  if (lines) g_strfreev(lines);
-  g_free(out);
-  g_free(err);
-
   return FL_METHOD_RESPONSE(
       fl_method_success_response_new(fl_value_ref(missing)));
 }

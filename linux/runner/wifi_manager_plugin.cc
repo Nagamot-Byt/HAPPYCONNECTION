@@ -1,6 +1,8 @@
 #include "wifi_manager_plugin.h"
 
 #include <glib.h>
+#include <glib/gstdio.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <set>
@@ -275,6 +277,119 @@ FlMethodResponse* handle_scan_networks() {
   return FL_METHOD_RESPONSE(fl_method_success_response_new(networks));
 }
 
+FlMethodResponse* connect_open_network(const std::string& ssid) {
+  g_autofree gchar* out = nullptr;
+  g_autofree gchar* err = nullptr;
+  gint exit_code = 0;
+  const gboolean ran =
+      run_nmcli({"--wait", "20", "device", "wifi", "connect", ssid}, &out,
+                &err, &exit_code);
+
+  if (!ran) {
+    return error_response(kWifiUnavailable,
+                          err != nullptr ? err : "No se pudo ejecutar nmcli.");
+  }
+  if (exit_code != 0) {
+    return nmcli_error_response(err, out, exit_code);
+  }
+  return nullptr;
+}
+
+FlMethodResponse* connect_secured_network(const std::string& ssid,
+                                          const std::string& password) {
+  gchar* temp_path = nullptr;
+  GError* error = nullptr;
+  const gint fd = g_file_open_tmp("medlink-wifi-XXXXXX", &temp_path, &error);
+  if (fd < 0) {
+    const std::string detail =
+        error != nullptr ? error->message : "desconocido";
+    g_clear_error(&error);
+    g_free(temp_path);
+    return error_response(
+        kWifiError,
+        "No se pudo preparar el archivo temporal de credenciales: " + detail);
+  }
+
+  const std::string contents =
+      "802-11-wireless-security.psk:" + password + "\n";
+  const ssize_t written = write(fd, contents.data(), contents.size());
+  close(fd);
+  if (written != static_cast<ssize_t>(contents.size())) {
+    g_remove(temp_path);
+    g_free(temp_path);
+    return error_response(
+        kWifiError,
+        "No se pudieron escribir las credenciales Wi-Fi en el archivo "
+        "temporal.");
+  }
+
+  auto cleanup = [&]() {
+    g_remove(temp_path);
+    g_free(temp_path);
+    temp_path = nullptr;
+  };
+
+  auto try_up = [&](const std::string& profile_id, gchar** out,
+                    gchar** err, gint* code) {
+    return run_nmcli({"--wait", "20", "connection", "up", "id", profile_id,
+                      "passwd-file", temp_path},
+                     out, err, code);
+  };
+
+  g_autofree gchar* out = nullptr;
+  g_autofree gchar* err = nullptr;
+  gint exit_code = 0;
+  gboolean ran = try_up(ssid, &out, &err, &exit_code);
+
+  if (ran && exit_code == 0) {
+    cleanup();
+    g_autofree gchar* message =
+        g_strdup_printf("Conectado a la red Wi-Fi \"%s\".", ssid.c_str());
+    return FL_METHOD_RESPONSE(fl_method_success_response_new(
+        fl_value_new_string(message)));
+  }
+
+  const std::string profile_id = "medlink-" + ssid;
+  g_clear_pointer(&out, g_free);
+  g_clear_pointer(&err, g_free);
+  exit_code = 0;
+  ran = run_nmcli({"--wait", "20", "connection", "add", "type", "wifi",
+                   "con-name", profile_id, "ssid", ssid,
+                   "wifi-sec.key-mgmt", "wpa-psk"},
+                  &out, &err, &exit_code);
+
+  if (!ran) {
+    cleanup();
+    return error_response(kWifiUnavailable,
+                          err != nullptr ? err : "No se pudo ejecutar nmcli.");
+  }
+
+  // The profile may already exist from a previous session; in that case the
+  // add command fails but activating it with the supplied password still
+  // works, so retry `up` regardless of the add result.
+  g_clear_pointer(&out, g_free);
+  g_clear_pointer(&err, g_free);
+  exit_code = 0;
+  ran = try_up(profile_id, &out, &err, &exit_code);
+
+  if (!ran) {
+    cleanup();
+    return error_response(kWifiUnavailable,
+                          err != nullptr ? err : "No se pudo ejecutar nmcli.");
+  }
+  if (exit_code != 0) {
+    FlMethodResponse* response = nmcli_error_response(err, out, exit_code);
+    cleanup();
+    return response;
+  }
+
+  cleanup();
+  g_autofree gchar* message =
+      g_strdup_printf("Conectado a la red Wi-Fi \"%s\".", ssid.c_str());
+  return FL_METHOD_RESPONSE(fl_method_success_response_new(
+      fl_value_new_string(message)));
+}
+
 FlMethodResponse* handle_connect(const std::string& ssid,
                                  const std::string& password) {
   if (!valid_ssid(ssid)) {
@@ -288,24 +403,12 @@ FlMethodResponse* handle_connect(const std::string& ssid,
   }
   if (!nmcli_available()) return no_nmcli_response();
 
-  std::vector<std::string> args{"--wait", "20", "device", "wifi", "connect",
-                                ssid};
-  if (!password.empty()) {
-    args.push_back("password");
-    args.push_back(password);
-  }
-
-  g_autofree gchar* out = nullptr;
-  g_autofree gchar* err = nullptr;
-  gint exit_code = 0;
-  const gboolean ran = run_nmcli(args, &out, &err, &exit_code);
-
-  if (!ran) {
-    return error_response(kWifiUnavailable,
-                          err != nullptr ? err : "No se pudo ejecutar nmcli.");
-  }
-  if (exit_code != 0) {
-    return nmcli_error_response(err, out, exit_code);
+  if (password.empty()) {
+    FlMethodResponse* response = connect_open_network(ssid);
+    if (response != nullptr) return response;
+  } else {
+    FlMethodResponse* response = connect_secured_network(ssid, password);
+    if (response != nullptr) return response;
   }
 
   g_autofree gchar* message =

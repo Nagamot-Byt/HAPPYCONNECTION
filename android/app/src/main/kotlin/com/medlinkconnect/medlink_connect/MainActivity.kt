@@ -6,6 +6,7 @@ import android.content.pm.ResolveInfo
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
@@ -36,15 +37,126 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL_ROUTE = "com.medlinkconnect/route_manager"
     private val CHANNEL_RDP = "com.medlinkconnect/rdp_launcher"
 
-    private val trackedRoutes: MutableList<String> = mutableListOf()
+    private data class TrackedRoute(
+        val destination: String,
+        val gateway: String,
+        val interfaceName: String
+    )
+
+    private val trackedRoutes: MutableList<TrackedRoute> = mutableListOf()
     private val routeLock = Any()
 
     private val safeHost = Regex("^[A-Za-z0-9._:%-]+$")
     private val safeInterface = Regex("^[A-Za-z0-9_.:-]+$")
-    private val safeCidr = Regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}(/[0-9]{1,2})?$")
 
-    private fun isSafeIpv4(value: String): Boolean =
-        Regex("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$").matches(value)
+    private fun isSafeIpv4(value: String): Boolean {
+        val parts = value.split(".")
+        if (parts.size != 4) return false
+        return parts.all { part ->
+            part.isNotEmpty() && part.all { it.isDigit() } &&
+                (part.toIntOrNull()?.let { it in 0..255 } == true)
+        }
+    }
+
+    private fun isSafeCidr(value: String): Boolean {
+        val parts = value.split("/")
+        if (parts.size > 2 || !isSafeIpv4(parts[0])) return false
+        if (parts.size == 1) return true
+        return parts[1].toIntOrNull()?.let { it in 1..32 } == true
+    }
+
+    private fun isDefaultCidr(value: String): Boolean =
+        value.substringAfter('/', "").toIntOrNull() == 0
+
+    private fun ipUnspecified(value: String): Boolean =
+        value == "0.0.0.0" || value == "::"
+
+    private fun stripHostPrefix(value: String): String =
+        if (value.endsWith("/32")) value.dropLast(3) else value
+
+    private fun prefixMatches(a: String, b: String): Boolean =
+        stripHostPrefix(a) == stripHostPrefix(b)
+
+    private fun routeLineMatches(
+        line: String,
+        destination: String,
+        gateway: String,
+        interfaceName: String
+    ): Boolean {
+        val tokens = line.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        if (tokens.isEmpty() || !prefixMatches(tokens.first(), destination)) {
+            return false
+        }
+        var viaMatches = false
+        var devMatches = false
+        for (i in 0 until tokens.size - 1) {
+            if (tokens[i] == "via" && tokens[i + 1] == gateway) {
+                viaMatches = true
+            } else if (tokens[i] == "dev" && tokens[i + 1] == interfaceName) {
+                devMatches = true
+            }
+        }
+        return viaMatches && devMatches
+    }
+
+    private fun routeExists(
+        destination: String,
+        gateway: String,
+        interfaceName: String
+    ): Boolean {
+        val output = runShell("ip route show $destination 2>&1").second
+        return output.lineSequence().any {
+            routeLineMatches(it, destination, gateway, interfaceName)
+        }
+    }
+
+    private fun routeExistsAny(destination: String): Boolean {
+        val output = runShell("ip route show $destination 2>&1").second
+        return output.lineSequence().any { line ->
+            val first = line.trim().split(Regex("\\s+")).firstOrNull() ?: return@any false
+            prefixMatches(first, destination)
+        }
+    }
+
+    private fun hasTrackedFor(destination: String): Boolean =
+        synchronized(routeLock) { trackedRoutes.any { it.destination == destination } }
+
+    private fun removeTrackedFor(destination: String): Boolean {
+        val matches = synchronized(routeLock) {
+            trackedRoutes.filter { it.destination == destination }
+        }
+        val removed = mutableListOf<TrackedRoute>()
+        val kept = mutableListOf<TrackedRoute>()
+        for (route in matches) {
+            val r = runShell(
+                "su -c 'ip route del ${route.destination} via ${route.gateway} " +
+                    "dev ${route.interfaceName}' 2>&1"
+            )
+            val gone = r.first == 0 || !routeExists(
+                route.destination, route.gateway, route.interfaceName
+            )
+            if (gone) removed.add(route) else kept.add(route)
+        }
+        synchronized(routeLock) {
+            trackedRoutes.removeAll { it.destination == destination }
+            trackedRoutes.addAll(kept)
+        }
+        return removed.isNotEmpty()
+    }
+
+    private fun removeTrackedExact(
+        destination: String,
+        gateway: String,
+        interfaceName: String
+    ) {
+        synchronized(routeLock) {
+            trackedRoutes.removeAll {
+                it.destination == destination &&
+                    it.gateway == gateway &&
+                    it.interfaceName == interfaceName
+            }
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -270,15 +382,15 @@ class MainActivity : FlutterActivity() {
             val javaPing = try {
                 val addr = InetAddress.getByName(host)
                 val start = System.currentTimeMillis()
-                val ok = addr.isReachable(3000)
+                val ok = addr.isReachable(2000)
                 if (ok) System.currentTimeMillis() - start else -1L
             } catch (_: Exception) { -1L }
             if (javaPing > 0) {
                 withContext(Dispatchers.Main) { result.success(javaPing.toInt()) }
                 return@launch
             }
-            // Try 2: shell `ping -c 4 -W 2`
-            val r = runShell("ping -c 4 -W 2 $host 2>&1")
+            // Try 2: shell `ping -c 2 -W 2`
+            val r = runShell("ping -c 2 -W 2 $host 2>&1")
             if (r.first != 0) {
                 withContext(Dispatchers.Main) {
                     result.error("inaccesible", "Host inaccesible", null)
@@ -306,7 +418,7 @@ class MainActivity : FlutterActivity() {
             try {
                 val socket = Socket()
                 val start = System.currentTimeMillis()
-                socket.connect(InetSocketAddress(host, port), 1500)
+                socket.connect(InetSocketAddress(host, port), 5000)
                 val elapsed = (System.currentTimeMillis() - start).toInt()
                 socket.close()
                 withContext(Dispatchers.Main) { result.success(elapsed) }
@@ -340,11 +452,25 @@ class MainActivity : FlutterActivity() {
     // Route Manager
     // ============================================================
     private fun handleAddRoute(dest: String, gw: String, iface: String, result: MethodChannel.Result) {
-        if (!safeCidr.matches(dest) || !isSafeIpv4(gw) || !safeInterface.matches(iface)) {
+        if (!isSafeCidr(dest) || !isSafeIpv4(gw) || !safeInterface.matches(iface)) {
             result.error("argumento_invalido", "Parámetros de ruta inválidos", null)
             return
         }
+        if (isDefaultCidr(dest)) {
+            result.error("argumento_invalido", "No se permite agregar la ruta por defecto /0.", null)
+            return
+        }
+        if (ipUnspecified(gw)) {
+            result.error("argumento_invalido", "Gateway inválido", null)
+            return
+        }
         CoroutineScope(Dispatchers.IO).launch {
+            if (routeExists(dest, gw, iface)) {
+                withContext(Dispatchers.Main) {
+                    result.success("La ruta ya existe para la interfaz indicada.")
+                }
+                return@launch
+            }
             if (!isUptimeAsRoot()) {
                 withContext(Dispatchers.Main) {
                     result.error("permiso_denegado",
@@ -353,23 +479,36 @@ class MainActivity : FlutterActivity() {
                 }
                 return@launch
             }
-            // Try ip route add, fallback route add
+            removeTrackedFor(dest)
+            if (routeExistsAny(dest)) {
+                withContext(Dispatchers.Main) {
+                    result.error("conflicto_ruta",
+                        "Ya existe una ruta para $dest en otra interfaz. Revísala antes de continuar.",
+                        null)
+                }
+                return@launch
+            }
             val cmd = "su -c 'ip route add $dest via $gw dev $iface' 2>&1"
             val r = runShell(cmd)
             if (r.first != 0) {
-                val fallback = "su -c 'route add -net $dest gw $gw dev $iface' 2>&1"
-                val r2 = runShell(fallback)
-                if (r2.first != 0) {
-                    val msg = if (r.second.isNotBlank()) r.second else r2.second
-                    withContext(Dispatchers.Main) {
-                        result.error("error_comando", "Error al agregar ruta: $msg", null)
-                    }
-                    return@launch
+                withContext(Dispatchers.Main) {
+                    result.error("error_comando", "Error al agregar ruta: ${r.second}", null)
                 }
+                return@launch
+            }
+            if (!routeExists(dest, gw, iface)) {
+                runShell("su -c 'ip route del $dest via $gw dev $iface' 2>&1")
+                withContext(Dispatchers.Main) {
+                    result.error("error_verificacion",
+                        "La ruta $dest no pudo verificarse tras agregarla.", null)
+                }
+                return@launch
             }
             synchronized(routeLock) {
-                if (!trackedRoutes.contains(dest)) {
-                    trackedRoutes.add(dest)
+                if (trackedRoutes.none {
+                        it.destination == dest && it.gateway == gw && it.interfaceName == iface
+                    }) {
+                    trackedRoutes.add(TrackedRoute(dest, gw, iface))
                 }
             }
             withContext(Dispatchers.Main) { result.success("Ruta $dest agregada exitosamente.") }
@@ -382,7 +521,7 @@ class MainActivity : FlutterActivity() {
         iface: String,
         result: MethodChannel.Result
     ) {
-        if (!safeCidr.matches(dest)) {
+        if (!isSafeCidr(dest) || isDefaultCidr(dest)) {
             result.error("argumento_invalido", "CIDR inválido", null)
             return
         }
@@ -394,28 +533,59 @@ class MainActivity : FlutterActivity() {
         }
         val exact = gw.isNotEmpty() && iface.isNotEmpty()
         CoroutineScope(Dispatchers.IO).launch {
-            val primary = if (exact) {
-                runShell("su -c 'ip route del $dest via $gw dev $iface' 2>&1")
-            } else {
-                runShell("su -c 'ip route del $dest' 2>&1")
-            }
-            if (primary.first != 0) {
-                val fallback = runShell("su -c 'route del -net $dest' 2>&1")
-                if (fallback.first != 0) {
+            if (exact) {
+                if (!routeExists(dest, gw, iface)) {
+                    removeTrackedExact(dest, gw, iface)
                     withContext(Dispatchers.Main) {
-                        result.error(
-                            "error_comando",
-                            "Error al eliminar ruta: ${primary.second.ifBlank { fallback.second }}",
-                            null
-                        )
+                        result.success("La ruta $dest ya no existe; nada que limpiar.")
                     }
                     return@launch
                 }
+                if (!isUptimeAsRoot()) {
+                    withContext(Dispatchers.Main) {
+                        result.error("permiso_denegado",
+                            "Requiere ROOT (su) para cambiar rutas. Alternativa: usar VpnService de Android.",
+                            null)
+                    }
+                    return@launch
+                }
+                val primary = runShell("su -c 'ip route del $dest via $gw dev $iface' 2>&1")
+                if (primary.first == 0 || !routeExists(dest, gw, iface)) {
+                    removeTrackedExact(dest, gw, iface)
+                    withContext(Dispatchers.Main) { result.success("Ruta $dest eliminada.") }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        result.error("error_comando",
+                            "Error al eliminar ruta: ${primary.second}", null)
+                    }
+                }
+                return@launch
             }
-            synchronized(routeLock) {
-                trackedRoutes.removeAll { it == dest }
+
+            if (!hasTrackedFor(dest)) {
+                withContext(Dispatchers.Main) {
+                    result.success("La ruta $dest no fue agregada por la aplicación; no se modificó.")
+                }
+                return@launch
             }
-            withContext(Dispatchers.Main) { result.success("Ruta $dest eliminada.") }
+            if (!isUptimeAsRoot()) {
+                withContext(Dispatchers.Main) {
+                    result.error("permiso_denegado",
+                        "Requiere ROOT (su) para cambiar rutas. Alternativa: usar VpnService de Android.",
+                        null)
+                }
+                return@launch
+            }
+            removeTrackedFor(dest)
+            if (hasTrackedFor(dest)) {
+                withContext(Dispatchers.Main) {
+                    result.error("error_comando", "No se pudo eliminar la ruta $dest.", null)
+                }
+            } else {
+                withContext(Dispatchers.Main) {
+                    result.success("Ruta $dest eliminada (solo si fue agregada por la aplicación).")
+                }
+            }
         }
     }
 
@@ -424,11 +594,24 @@ class MainActivity : FlutterActivity() {
         result: MethodChannel.Result
     ) {
         if (!isSafeIpv4(gw) || !safeInterface.matches(iface) ||
-            subnets.any { !safeCidr.matches(it.trim()) }) {
+            subnets.any { !isSafeCidr(it.trim()) || isDefaultCidr(it.trim()) }
+        ) {
             result.error("argumento_invalido", "Parámetros de túnel inválidos", null)
             return
         }
+        if (ipUnspecified(gw)) {
+            result.error("argumento_invalido", "Gateway inválido", null)
+            return
+        }
         CoroutineScope(Dispatchers.IO).launch {
+            val pending = subnets.map { it.trim() }.filter { it.isNotEmpty() }
+                .filterNot { routeExists(it, gw, iface) }
+            if (pending.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    result.success("Las rutas del túnel dividido ya existen.")
+                }
+                return@launch
+            }
             if (!isUptimeAsRoot()) {
                 withContext(Dispatchers.Main) {
                     result.error("permiso_denegado",
@@ -437,34 +620,46 @@ class MainActivity : FlutterActivity() {
                 }
                 return@launch
             }
-            val added = mutableListOf<String>()
-            for (rawSubnet in subnets) {
-                val subnet = rawSubnet.trim()
-                if (subnet.isEmpty()) continue
+            val added = mutableListOf<TrackedRoute>()
+            fun rollback() {
+                for (prev in added) {
+                    runShell(
+                        "su -c 'ip route del ${prev.destination} via ${prev.gateway} " +
+                            "dev ${prev.interfaceName}' 2>&1"
+                    )
+                }
+            }
+            for (subnet in pending) {
+                removeTrackedFor(subnet)
+                if (routeExistsAny(subnet)) {
+                    rollback()
+                    withContext(Dispatchers.Main) {
+                        result.error("conflicto_ruta",
+                            "Ya existe una ruta para $subnet en otra interfaz. Revísala antes de continuar.",
+                            null)
+                    }
+                    return@launch
+                }
                 val cmd = "su -c 'ip route add $subnet via $gw dev $iface' 2>&1"
                 val r = runShell(cmd)
-                if (r.first != 0) {
-                    val r2 = runShell("su -c 'route add -net $subnet gw $gw dev $iface' 2>&1")
-                    if (r2.first != 0) {
-                        // Rollback only the routes added in this attempt, using
-                        // the exact gateway/interface to avoid deleting another
-                        // route for the same destination.
-                        for (prev in added) {
-                            runShell("su -c 'ip route del $prev via $gw dev $iface' 2>&1")
-                        }
-                        withContext(Dispatchers.Main) {
-                            result.error("error_tunel_dividido",
-                                "Error en ruta $subnet. Se revirtieron los cambios.", null)
-                        }
-                        return@launch
+                if (r.first != 0 || !routeExists(subnet, gw, iface)) {
+                    rollback()
+                    withContext(Dispatchers.Main) {
+                        result.error("error_tunel_dividido",
+                            "Error en ruta $subnet. Se revirtieron los cambios.", null)
                     }
+                    return@launch
                 }
-                added.add(subnet)
+                added.add(TrackedRoute(subnet, gw, iface))
             }
             synchronized(routeLock) {
-                for (subnet in added) {
-                    if (!trackedRoutes.contains(subnet)) {
-                        trackedRoutes.add(subnet)
+                for (route in added) {
+                    if (trackedRoutes.none {
+                            it.destination == route.destination &&
+                                it.gateway == route.gateway &&
+                                it.interfaceName == route.interfaceName
+                        }) {
+                        trackedRoutes.add(route)
                     }
                 }
             }
@@ -484,15 +679,21 @@ class MainActivity : FlutterActivity() {
                 return@launch
             }
             val msgs = mutableListOf<String>()
-            val failed = mutableListOf<String>()
-            for (dest in current) {
-                val r = runShell("su -c 'ip route del $dest' 2>&1")
-                val alreadyGone = r.second.contains("no such process", ignoreCase = true)
-                if (r.first == 0 || alreadyGone) {
-                    msgs.add("Ruta $dest eliminada.")
+            val failed = mutableListOf<TrackedRoute>()
+            for (route in current) {
+                val r = runShell(
+                    "su -c 'ip route del ${route.destination} via ${route.gateway} " +
+                        "dev ${route.interfaceName}' 2>&1"
+                )
+                val alreadyGone = r.second.contains("no such process", ignoreCase = true) ||
+                    r.second.contains("not in table", ignoreCase = true)
+                val gone = r.first == 0 || alreadyGone ||
+                    !routeExists(route.destination, route.gateway, route.interfaceName)
+                if (gone) {
+                    msgs.add("Ruta ${route.destination} eliminada.")
                 } else {
-                    failed.add(dest)
-                    msgs.add("Error al eliminar $dest: ${r.second.take(120)}")
+                    failed.add(route)
+                    msgs.add("Error al eliminar ${route.destination}: ${r.second.take(120)}")
                 }
             }
             synchronized(routeLock) {
@@ -526,10 +727,17 @@ class MainActivity : FlutterActivity() {
             try {
                 val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
                 val active = cm.activeNetwork
-                val props = cm.getLinkProperties(active)
+                val network = active ?: cm.allNetworks.firstOrNull { candidate ->
+                    cm.getNetworkCapabilities(candidate)
+                        ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+                }
+                val props = network?.let { cm.getLinkProperties(it) }
                 if (props != null) {
                     out["interfaceName"] = props.interfaceName ?: ""
-                    val defaultRoute = props.routes.firstOrNull { it.isDefaultRoute && it.gateway != null }
+                    val defaultRoute = props.routes.firstOrNull {
+                        it.isDefaultRoute && it.gateway != null &&
+                            !ipUnspecified(it.gateway?.hostAddress ?: "")
+                    }
                     out["gateway"] = defaultRoute?.gateway?.hostAddress ?: ""
                 }
             } catch (_: Throwable) {
@@ -564,36 +772,17 @@ class MainActivity : FlutterActivity() {
         result: MethodChannel.Result
     ) {
         if (!isSafeIpv4(gw) || !safeInterface.matches(iface) ||
-            subnets.any { !safeCidr.matches(it.trim()) }
+            subnets.any { !isSafeCidr(it.trim()) }
         ) {
             result.error("argumento_invalido", "Parámetros de verificación inválidos", null)
             return
         }
         CoroutineScope(Dispatchers.IO).launch {
-            val routesOutput = runShell("ip route 2>&1").second
             val missing = mutableListOf<String>()
             for (rawSubnet in subnets) {
                 val subnet = rawSubnet.trim()
                 if (subnet.isEmpty()) continue
-                var present = false
-                for (line in routesOutput.lineSequence()) {
-                    val tokens = line.trim().split(Regex("\\s+"))
-                    if (tokens.firstOrNull() != subnet) continue
-                    var viaMatches = false
-                    var devMatches = false
-                    for (i in 0 until tokens.size - 1) {
-                        if (tokens[i] == "via" && tokens[i + 1] == gw) {
-                            viaMatches = true
-                        } else if (tokens[i] == "dev" && tokens[i + 1] == iface) {
-                            devMatches = true
-                        }
-                    }
-                    if (viaMatches && devMatches) {
-                        present = true
-                        break
-                    }
-                }
-                if (!present) {
+                if (!routeExists(subnet, gw, iface)) {
                     missing.add(subnet)
                 }
             }

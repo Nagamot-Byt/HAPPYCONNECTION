@@ -684,6 +684,7 @@
   "logWorkflowWifiUnavailable": "El control automático de Wi-Fi no está disponible en esta plataforma; se usará la red actual.",
   "logWorkflowNoAutoNetwork": "No se detectaron gateway/interfaz automáticamente. Se usarán los valores configurados.",
   "logWorkflowStepPrepare": "Paso 1/4 — Preparando la conexión\nSe omiten resets agresivos de red para evitar demoras y cortes innecesarios.",
+  "logWorkflowNoSubnets": "No hay subredes configuradas; se omite el túnel dividido.",
   "logWorkflowStepTunnel": "Paso 2/4 — Habilitando túnel dividido para {count} subred(es)",
   "@logWorkflowStepTunnel": {
     "placeholders": {

@@ -1,3 +1,13 @@
+/// Result of a probe that keeps the failure cause tied to that specific call.
+class NetworkProbeResult<T> {
+  const NetworkProbeResult({this.value, this.error});
+
+  final T? value;
+  final String? error;
+
+  bool get succeeded => value != null;
+}
+
 /// Abstract interface for network diagnostic operations.
 ///
 /// Platform implementations use method channels
@@ -31,4 +41,17 @@ abstract class NetworkDiagnostics {
   /// connection time in milliseconds, or `null` when the socket can't
   /// be established within the timeout budget.
   Future<int?> checkTcpPort(String host, int port);
+
+  /// Like [checkTcpPort], but pairs the failure cause with this exact probe so
+  /// parallel callers do not race on [lastProbeError].
+  Future<NetworkProbeResult<int>> checkTcpPortDetailed(
+    String host,
+    int port,
+  ) async {
+    final value = await checkTcpPort(host, port);
+    return NetworkProbeResult(
+      value: value,
+      error: value == null ? lastProbeError : null,
+    );
+  }
 }

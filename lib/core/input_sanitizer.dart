@@ -9,9 +9,10 @@ abstract final class InputSanitizer {
   static final _ipv4Pattern =
       RegExp(r'^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)(\.(?!$)|$)){4}$');
 
-  // Regex for hostname: letters, digits, dots, hyphens, underscores only
-  static final _hostnamePattern =
-      RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9._-]{0,253}[a-zA-Z0-9]$');
+  // One DNS label: letters, digits, hyphens and underscores. Hyphens cannot
+  // be the first or last character; underscores are kept for legacy presets.
+  static final _hostnameLabelPattern =
+      RegExp(r'^[a-zA-Z0-9_](?:[a-zA-Z0-9_-]{0,61}[a-zA-Z0-9_])?$');
 
   // Control characters are never valid in names sent to native APIs.
   static final _controlChars = RegExp(r'[\x00-\x1F\x7F]');
@@ -61,13 +62,27 @@ abstract final class InputSanitizer {
     if (parts.length != 2) {
       throw ArgumentError.value(trimmed, fieldName, 'Formato CIDR inválido.');
     }
-    sanitizeIpv4(parts[0], fieldName: '$fieldName (IP)');
+    final address = sanitizeIpv4(parts[0], fieldName: '$fieldName (IP)');
     final prefix = int.tryParse(parts[1]);
-    if (prefix == null || prefix < 0 || prefix > 32) {
+    if (prefix == null || prefix < 1 || prefix > 32) {
       throw ArgumentError.value(
-          trimmed, fieldName, 'Prefijo CIDR debe estar entre 0 y 32.');
+          trimmed, fieldName, 'Prefijo CIDR debe estar entre 1 y 32.');
     }
-    return trimmed;
+    final mask = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF;
+    final network = _ipv4ToInt(address) & mask;
+    return '${_intToIpv4(network)}/$prefix';
+  }
+
+  static int _ipv4ToInt(String address) {
+    final octets = address.split('.').map(int.parse).toList(growable: false);
+    return (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3];
+  }
+
+  static String _intToIpv4(int value) {
+    return '${(value >> 24) & 0xFF}.'
+        '${(value >> 16) & 0xFF}.'
+        '${(value >> 8) & 0xFF}.'
+        '${value & 0xFF}';
   }
 
   /// Validates and returns a sanitized hostname or IP.
@@ -84,10 +99,17 @@ abstract final class InputSanitizer {
     }
     // Try as IPv4 first
     if (_ipv4Pattern.hasMatch(trimmed)) return trimmed;
-    // Then as hostname
-    if (!_hostnamePattern.hasMatch(trimmed)) {
-      throw ArgumentError.value(trimmed, fieldName,
-          'Nombre de host inválido. Solo letras, números, puntos y guiones.');
+    // Then as hostname: no empty labels (consecutive dots), valid label edges,
+    // and a maximum total length.
+    final labels = trimmed.split('.');
+    final valid = trimmed.length <= 253 &&
+        labels.every((label) => _hostnameLabelPattern.hasMatch(label));
+    if (!valid) {
+      throw ArgumentError.value(
+          trimmed,
+          fieldName,
+          'Nombre de host inválido. Usa etiquetas DNS de hasta 63 caracteres '
+          'sin puntos consecutivos ni guiones en los extremos.');
     }
     return trimmed;
   }
@@ -177,15 +199,23 @@ abstract final class InputSanitizer {
     return port;
   }
 
-  /// Validates a list of subnet strings. Returns a sanitized list.
+  /// Validates a list of subnet strings. Returns a sanitized, de-duplicated
+  /// list preserving the original order.
+  ///
+  /// Set [allowEmpty] when the platform can connect without split tunneling
+  /// (for example iOS or macOS, where route changes are not supported).
   static List<String> sanitizeSubnets(List<String> subnets,
-      {String fieldName = 'Subredes'}) {
-    if (subnets.isEmpty) {
+      {String fieldName = 'Subredes', bool allowEmpty = false}) {
+    if (subnets.isEmpty && !allowEmpty) {
       throw ArgumentError.value(
           subnets, fieldName, 'Debe haber al menos una subred.');
     }
-    return subnets
-        .map((s) => sanitizeCidr(s, fieldName: fieldName))
-        .toList(growable: false);
+    final seen = <String>{};
+    final result = <String>[];
+    for (final subnet in subnets) {
+      final sanitized = sanitizeCidr(subnet, fieldName: fieldName);
+      if (seen.add(sanitized)) result.add(sanitized);
+    }
+    return List.unmodifiable(result);
   }
 }

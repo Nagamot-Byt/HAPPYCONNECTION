@@ -79,7 +79,7 @@ static bool ParseCIDR(const std::wstring& cidr_str, SOCKADDR_INET& addr, UINT8& 
   std::wstring ip = cidr_str.substr(0, pos);
   try {
     int p = std::stoi(cidr_str.substr(pos + 1));
-    if (p < 0 || p > 32) return false;
+    if (p < 1 || p > 32) return false;
     prefix = static_cast<UINT8>(p);
   } catch (...) {
     return false;
@@ -139,6 +139,85 @@ static bool RowMatches(const MIB_IPFORWARD_ROW2& row,
          row.NextHop.Ipv4.sin_family == AF_INET &&
          row.NextHop.Ipv4.sin_addr.S_un.S_addr ==
              gw_addr.Ipv4.sin_addr.S_un.S_addr;
+}
+
+static DWORD RemoveRouteNative(const std::wstring& dest_cidr,
+                               const std::wstring& gw,
+                               const std::wstring& iface_alias);
+
+static bool RouteExistsAny(const std::wstring& dest_cidr) {
+  SOCKADDR_INET dest_addr{};
+  UINT8 prefix;
+  if (!ParseCIDR(dest_cidr, dest_addr, prefix)) return false;
+
+  PMIB_IPFORWARD_TABLE2 table = nullptr;
+  if (GetIpForwardTable2(AF_INET, &table) != NO_ERROR) return false;
+
+  bool found = false;
+  for (ULONG i = 0; i < table->NumEntries; ++i) {
+    const auto& row = table->Table[i];
+    if (row.DestinationPrefix.PrefixLength != prefix) continue;
+    if (row.DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr !=
+        dest_addr.Ipv4.sin_addr.S_un.S_addr) {
+      continue;
+    }
+    found = true;
+    break;
+  }
+  FreeMibTable(table);
+  return found;
+}
+
+static bool RemoveTrackedForDestination(const std::wstring& dest_cidr) {
+  std::lock_guard<std::mutex> lock(g_routes_mutex);
+  std::vector<TrackedRoute> remaining;
+  bool removed = false;
+  for (const auto& tracked : g_tracked_routes) {
+    if (tracked.dest_cidr != dest_cidr) {
+      remaining.push_back(tracked);
+      continue;
+    }
+    const DWORD status = RemoveRouteNative(tracked.dest_cidr,
+                                           tracked.gateway, tracked.iface);
+    if (status == NO_ERROR || status == ERROR_NOT_FOUND) {
+      removed = true;
+    } else {
+      remaining.push_back(tracked);
+    }
+  }
+  g_tracked_routes.swap(remaining);
+  return removed;
+}
+
+static void RemoveTrackedExact(const std::wstring& dest_cidr,
+                               const std::wstring& gw,
+                               const std::wstring& iface) {
+  std::lock_guard<std::mutex> lock(g_routes_mutex);
+  g_tracked_routes.erase(
+      std::remove_if(g_tracked_routes.begin(), g_tracked_routes.end(),
+                     [&](const TrackedRoute& tracked) {
+                       return tracked.dest_cidr == dest_cidr &&
+                              tracked.gateway == gw &&
+                              tracked.iface == iface;
+                     }),
+      g_tracked_routes.end());
+}
+
+static bool HasTrackedForDestination(const std::wstring& dest_cidr) {
+  std::lock_guard<std::mutex> lock(g_routes_mutex);
+  for (const auto& tracked : g_tracked_routes) {
+    if (tracked.dest_cidr == dest_cidr) return true;
+  }
+  return false;
+}
+
+static bool InterfaceIsConnected(NET_LUID luid) {
+  MIB_IPINTERFACE_ROW interface_row;
+  InitializeIpInterfaceEntry(&interface_row);
+  interface_row.InterfaceLuid = luid;
+  interface_row.Family = AF_INET;
+  if (GetIpInterfaceEntry(&interface_row) != NO_ERROR) return false;
+  return interface_row.Connected && !interface_row.DisableDefaultRoutes;
 }
 
 static DWORD AddRouteNative(const std::wstring& dest_cidr,
@@ -227,15 +306,18 @@ static std::unique_ptr<EncodableValue> HandleAddRoute(
         "argumento_invalido",
         "Faltan parámetros: destinationCidr, gateway, interfaceName"));
   }
-  if (!IsElevated()) {
-    return std::make_unique<EncodableValue>(ErrPair(
-        "permiso_denegado",
-        "Se requieren privilegios de Administrador"));
-  }
 
   auto wdest = U8ToW(dest);
   auto wgw = U8ToW(gw);
   auto wiface = U8ToW(iface);
+
+  SOCKADDR_INET dest_addr{};
+  UINT8 prefix;
+  if (!ParseCIDR(wdest, dest_addr, prefix)) {
+    return std::make_unique<EncodableValue>(ErrPair(
+        "argumento_invalido",
+        "CIDR inválido. No se permite la ruta por defecto /0."));
+  }
 
   NET_LUID luid{};
   if (!GetInterfaceLuid(wiface, luid)) {
@@ -248,8 +330,25 @@ static std::unique_ptr<EncodableValue> HandleAddRoute(
         "La ruta " + dest + " ya existe para la interfaz indicada.");
   }
 
+  if (!IsElevated()) {
+    return std::make_unique<EncodableValue>(ErrPair(
+        "permiso_denegado",
+        "Se requieren privilegios de Administrador"));
+  }
+
+  RemoveTrackedForDestination(wdest);
+  if (RouteExistsAny(wdest)) {
+    return std::make_unique<EncodableValue>(ErrPair(
+        "conflicto_ruta",
+        "Ya existe una ruta para " + dest +
+            " que no fue creada por esta aplicación. Revísala antes de "
+            "continuar."));
+  }
+
   const DWORD status = AddRouteNative(wdest, wgw, wiface);
-  if (status == ERROR_OBJECT_ALREADY_EXISTS) {
+  if (status == ERROR_OBJECT_ALREADY_EXISTS &&
+      RouteExists(wdest, wgw, wiface)) {
+    TrackRoute(wdest, wgw, wiface, luid);
     return std::make_unique<EncodableValue>(
         "La ruta " + dest + " ya existe para la interfaz indicada.");
   }
@@ -281,19 +380,26 @@ static std::unique_ptr<EncodableValue> HandleRemoveRoute(
     return std::make_unique<EncodableValue>(ErrPair(
         "argumento_invalido", "Falta destinationCidr"));
   }
-  if (!IsElevated()) {
-    return std::make_unique<EncodableValue>(ErrPair(
-        "permiso_denegado",
-        "Se requieren privilegios de Administrador"));
-  }
 
   const auto wdest = U8ToW(dest);
 
   // Limpieza exacta de una ruta dejada por una sesión anterior.
   if (!gw.empty() && !iface.empty()) {
-    const DWORD status =
-        RemoveRouteNative(wdest, U8ToW(gw), U8ToW(iface));
+    const auto wgw = U8ToW(gw);
+    const auto wiface = U8ToW(iface);
+    if (!RouteExists(wdest, wgw, wiface)) {
+      RemoveTrackedExact(wdest, wgw, wiface);
+      return std::make_unique<EncodableValue>(
+          "La ruta " + dest + " ya no existe.");
+    }
+    if (!IsElevated()) {
+      return std::make_unique<EncodableValue>(ErrPair(
+          "permiso_denegado",
+          "Se requieren privilegios de Administrador"));
+    }
+    const DWORD status = RemoveRouteNative(wdest, wgw, wiface);
     if (status == NO_ERROR || status == ERROR_NOT_FOUND) {
+      RemoveTrackedExact(wdest, wgw, wiface);
       return std::make_unique<EncodableValue>(
           "Ruta " + dest + " eliminada.");
     }
@@ -302,6 +408,17 @@ static std::unique_ptr<EncodableValue> HandleRemoveRoute(
         "No se pudo eliminar la ruta " + dest + ": código " +
             std::to_string(status) + "."));
   }
+
+  if (!HasTrackedForDestination(wdest)) {
+    return std::make_unique<EncodableValue>(
+        "No hay una ruta registrada por la aplicación para " + dest + ".");
+  }
+  if (!IsElevated()) {
+    return std::make_unique<EncodableValue>(ErrPair(
+        "permiso_denegado",
+        "Se requieren privilegios de Administrador"));
+  }
+
   std::string failures;
   size_t removed_count = 0;
 
@@ -369,39 +486,70 @@ static std::unique_ptr<EncodableValue> HandleEnableSplitTunnel(
         "argumento_invalido",
         "Se requieren hospitalSubnets (lista), gateway, interfaceName"));
   }
-  if (!IsElevated()) {
-    return std::make_unique<EncodableValue>(ErrPair(
-        "permiso_denegado",
-        "Se requieren privilegios de Administrador. Ejecuta la aplicación como Administrador."));
-  }
 
   const auto wgw = U8ToW(*gw_str);
   const auto wiface = U8ToW(*iface_str);
+  if (wgw.empty() || wiface.empty()) {
+    return std::make_unique<EncodableValue>(ErrPair(
+        "argumento_invalido", "El gateway y la interfaz no pueden estar vacíos."));
+  }
   NET_LUID luid{};
   if (!GetInterfaceLuid(wiface, luid)) {
     return std::make_unique<EncodableValue>(ErrPair(
         "argumento_invalido", "No se encontró la interfaz indicada."));
   }
 
-  std::vector<TrackedRoute> added_now;
+  std::vector<std::wstring> pending;
   for (const auto& entry : *subnets_list) {
     const auto* dest_s = std::get_if<std::string>(&entry);
     if (!dest_s || dest_s->empty()) continue;
 
     const auto wdest = U8ToW(*dest_s);
-    if (RouteExists(wdest, wgw, wiface)) {
-      continue;
+    SOCKADDR_INET dest_addr{};
+    UINT8 prefix;
+    if (!ParseCIDR(wdest, dest_addr, prefix)) {
+      return std::make_unique<EncodableValue>(ErrPair(
+          "argumento_invalido",
+          "CIDR inválido en " + *dest_s +
+              ". No se permite la ruta por defecto /0."));
     }
+    if (!RouteExists(wdest, wgw, wiface)) {
+      pending.push_back(wdest);
+    }
+  }
 
-    const DWORD status = AddRouteNative(wdest, wgw, wiface);
-    if (status == ERROR_OBJECT_ALREADY_EXISTS) {
-      continue;
-    }
-    if (status != NO_ERROR || !RouteExists(wdest, wgw, wiface)) {
+  if (pending.empty()) {
+    return std::make_unique<EncodableValue>(
+        "Las rutas del túnel dividido ya existen.");
+  }
+  if (!IsElevated()) {
+    return std::make_unique<EncodableValue>(ErrPair(
+        "permiso_denegado",
+        "Se requieren privilegios de Administrador. Ejecuta la aplicación como Administrador."));
+  }
+
+  std::vector<TrackedRoute> added_now;
+  for (const auto& wdest : pending) {
+    RemoveTrackedForDestination(wdest);
+    if (RouteExistsAny(wdest)) {
       for (const auto& added : added_now) {
         RemoveRouteNative(added.dest_cidr, added.gateway, added.iface);
       }
-      std::string msg = "Error al agregar ruta " + *dest_s +
+      return std::make_unique<EncodableValue>(ErrPair(
+          "conflicto_ruta",
+          "Ya existe una ruta para " + WToU8(wdest) +
+              " que no fue creada por esta aplicación. Revísala antes de "
+              "continuar."));
+    }
+
+    const DWORD status = AddRouteNative(wdest, wgw, wiface);
+    if (status != NO_ERROR &&
+        !(status == ERROR_OBJECT_ALREADY_EXISTS &&
+          RouteExists(wdest, wgw, wiface))) {
+      for (const auto& added : added_now) {
+        RemoveRouteNative(added.dest_cidr, added.gateway, added.iface);
+      }
+      std::string msg = "Error al agregar ruta " + WToU8(wdest) +
           " (se revirtieron los cambios): código " +
           std::to_string(status);
       return std::make_unique<EncodableValue>(
@@ -443,12 +591,6 @@ static std::unique_ptr<EncodableValue> HandleEnableSplitTunnel(
 //  disableSplitTunnel
 // ------------------------------------------------------------------
 static std::unique_ptr<EncodableValue> HandleDisableSplitTunnel() {
-  if (!IsElevated()) {
-    return std::make_unique<EncodableValue>(ErrPair(
-        "permiso_denegado",
-        "Se requieren privilegios de Administrador"));
-  }
-
   std::vector<TrackedRoute> routes_copy;
   {
     std::lock_guard<std::mutex> lock(g_routes_mutex);
@@ -458,6 +600,14 @@ static std::unique_ptr<EncodableValue> HandleDisableSplitTunnel() {
   if (routes_copy.empty()) {
     return std::make_unique<EncodableValue>(
         "No hay rutas de túnel dividido activas.");
+  }
+  if (!IsElevated()) {
+    std::lock_guard<std::mutex> lock(g_routes_mutex);
+    g_tracked_routes.insert(g_tracked_routes.end(), routes_copy.begin(),
+                            routes_copy.end());
+    return std::make_unique<EncodableValue>(ErrPair(
+        "permiso_denegado",
+        "Se requieren privilegios de Administrador"));
   }
 
   std::stringstream results;
@@ -520,15 +670,15 @@ static std::unique_ptr<EncodableValue> HandleGetPrimaryDefaultRouteInfo() {
     if (row.NextHop.Ipv4.sin_family != AF_INET) continue;
     if (row.NextHop.Ipv4.sin_addr.S_un.S_addr == 0) continue;
 
-    ULONG interface_metric = 0;
     MIB_IPINTERFACE_ROW interface_row;
     InitializeIpInterfaceEntry(&interface_row);
     interface_row.InterfaceLuid = row.InterfaceLuid;
     interface_row.Family = AF_INET;
-    if (GetIpInterfaceEntry(&interface_row) == NO_ERROR) {
-      interface_metric = interface_row.Metric;
+    if (GetIpInterfaceEntry(&interface_row) != NO_ERROR) continue;
+    if (!interface_row.Connected || interface_row.DisableDefaultRoutes) {
+      continue;
     }
-    const ULONG combined = row.Metric + interface_metric;
+    const ULONG combined = row.Metric + interface_row.Metric;
     if (!found || combined < best_metric) {
       found = true;
       best_metric = combined;

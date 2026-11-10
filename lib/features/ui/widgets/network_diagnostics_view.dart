@@ -36,13 +36,13 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  controller.wifiManager == null
+                  !controller.wifiSupported
                       ? l10n.wifiNoNativeHelper
                       : l10n.wifiSelectHint,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 12),
-                if (controller.wifiManager != null) ...[
+                if (controller.wifiSupported) ...[
                   _buildWifiSelector(context, controller),
                   if (controller.wifiScanError != null &&
                       controller.wifiNetworks.isEmpty)
@@ -81,7 +81,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                     OutlinedButton.icon(
                       onPressed: controller.busy ||
                               !controller.loaded ||
-                              controller.wifiManager == null
+                              !controller.wifiSupported
                           ? null
                           : () => controller.refreshWifiNetworks(),
                       icon: const Icon(Icons.refresh),
@@ -90,7 +90,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                     FilledButton.tonalIcon(
                       onPressed: controller.busy ||
                               !controller.loaded ||
-                              controller.wifiManager == null
+                              !controller.wifiSupported
                           ? null
                           : () => controller.connectWifiOnly(),
                       icon: const Icon(Icons.wifi),
@@ -125,7 +125,7 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                 child: OutlinedButton.icon(
                   onPressed: controller.busy ||
                           !controller.loaded ||
-                          controller.wifiManager == null
+                          !controller.wifiSupported
                       ? null
                       : () => controller.syncCurrentWifiInfo(silent: false),
                   icon: const Icon(Icons.my_location_outlined),

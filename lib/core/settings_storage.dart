@@ -38,9 +38,20 @@ class SettingsStorage {
         );
 
   /// Pre-loads encrypted fields into memory.
+  ///
+  /// Secure storage failures must not prevent non-sensitive preferences from
+  /// loading; the affected fields fall back to their last/default values.
   Future<void> init() async {
-    _rdpUsername = await _secure.read(key: 'rdpUsername') ?? '';
-    _rdpDomain = await _secure.read(key: 'rdpDomain') ?? '';
+    try {
+      _rdpUsername = await _secure.read(key: 'rdpUsername') ?? '';
+    } catch (_) {
+      _rdpUsername = '';
+    }
+    try {
+      _rdpDomain = await _secure.read(key: 'rdpDomain') ?? '';
+    } catch (_) {
+      _rdpDomain = '';
+    }
   }
 
   /// Persists current in-memory values for sensitive fields.

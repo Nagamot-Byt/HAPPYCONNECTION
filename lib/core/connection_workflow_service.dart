@@ -57,6 +57,17 @@ class ConnectionWorkflowService {
     return l10n;
   }
 
+  bool get _requiresNetworkConfig =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
+  bool get _supportsWifi =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
+  bool _sameInterfaceName(String a, String b) =>
+      a.trim().toLowerCase() == b.trim().toLowerCase();
+
   Stream<WorkflowState> connect({
     required List<String> subnets,
     required String host,
@@ -90,8 +101,11 @@ class ConnectionWorkflowService {
       var effectivePort = resolvedPort;
 
       // Validate inputs using InputSanitizer
-      final sanitizedSubnets = InputSanitizer.sanitizeSubnets(subnets,
-          fieldName: _t.hospitalSubnets);
+      final sanitizedSubnets = InputSanitizer.sanitizeSubnets(
+        subnets,
+        fieldName: _t.hospitalSubnets,
+        allowEmpty: !_requiresNetworkConfig,
+      );
       final sanitizedGateway = gateway.trim().isEmpty
           ? ''
           : InputSanitizer.sanitizeIpv4(gateway, fieldName: _t.gateway);
@@ -111,7 +125,14 @@ class ConnectionWorkflowService {
       String currentGateway = sanitizedGateway;
       String currentIface = sanitizedIface;
 
-      if (wifiManager != null && selectedWifi.isNotEmpty) {
+      if (selectedWifi.isNotEmpty && !_supportsWifi) {
+        yield WorkflowState(
+          step: ConnectionStep.diagnostics,
+          logMessage: _t.logWorkflowWifiUnavailable,
+        );
+      }
+
+      if (_supportsWifi && wifiManager != null && selectedWifi.isNotEmpty) {
         try {
           final sanitizedSsid = InputSanitizer.sanitizeSsid(selectedWifi);
           final targetSsid = sanitizedSsid;
@@ -121,10 +142,8 @@ class ConnectionWorkflowService {
             final info = await wifiManager!.getCurrentConnectionInfo();
             alreadyConnected = info.ssid == targetSsid;
             if (alreadyConnected) {
-              final g = info.gateway.trim();
-              final inf = info.interfaceName.trim();
-              if (g.isNotEmpty) currentGateway = g;
-              if (inf.isNotEmpty) currentIface = inf;
+              currentGateway = info.gateway.trim();
+              currentIface = info.interfaceName.trim();
             }
           } on MissingPluginException {
             rethrow;
@@ -157,8 +176,11 @@ class ConnectionWorkflowService {
                 if (info.ssid != targetSsid) continue;
                 final g = info.gateway.trim();
                 final inf = info.interfaceName.trim();
-                if (g.isNotEmpty) currentGateway = g;
-                if (inf.isNotEmpty) currentIface = inf;
+                if (_requiresNetworkConfig && (g.isEmpty || inf.isEmpty)) {
+                  continue;
+                }
+                currentGateway = g;
+                currentIface = inf;
                 confirmed = true;
                 yield WorkflowState(
                   step: ConnectionStep.diagnostics,
@@ -193,11 +215,18 @@ class ConnectionWorkflowService {
 
         if (currentGateway.isEmpty || currentIface.isEmpty) {
           try {
+            final knownIface =
+                currentIface.isNotEmpty ? currentIface : sanitizedIface;
             final info = await routeManager.getPrimaryDefaultRouteInfo();
             final g = (info['gateway'] ?? '').trim();
             final inf = (info['interfaceName'] ?? '').trim();
-            if (g.isNotEmpty) currentGateway = g;
-            if (inf.isNotEmpty) currentIface = inf;
+            final sameInterface = knownIface.isEmpty ||
+                inf.isEmpty ||
+                _sameInterfaceName(inf, knownIface);
+            if (sameInterface) {
+              if (g.isNotEmpty) currentGateway = g;
+              if (inf.isNotEmpty) currentIface = inf;
+            }
           } catch (_) {}
         }
         if (currentGateway.isEmpty || currentIface.isEmpty) {
@@ -217,96 +246,128 @@ class ConnectionWorkflowService {
         logMessage: _t.logWorkflowStepPrepare,
       );
 
-      if (currentGateway.isEmpty || currentIface.isEmpty) {
+      if (_requiresNetworkConfig &&
+          (currentGateway.isEmpty || currentIface.isEmpty)) {
         throw RouteConfigurationException(_t.logMissingGatewayInterfaceHint);
       }
 
-      yield WorkflowState(
-        step: ConnectionStep.splitTunnel,
-        logMessage: _t.logWorkflowStepTunnel(sanitizedSubnets.length),
-      );
-
-      try {
-        splitTunnelSetupAttempted = true;
-        final splitMsg = await routeManager.enableSplitTunnel(
-          hospitalSubnets: sanitizedSubnets,
-          gateway: currentGateway,
-          interfaceName: currentIface,
-        );
-
+      if (sanitizedSubnets.isEmpty) {
         yield WorkflowState(
-            step: ConnectionStep.splitTunnel, logMessage: splitMsg);
-        splitTunnelEnabledThisAttempt = true;
-
+          step: ConnectionStep.splitTunnel,
+          logMessage: _t.logWorkflowNoSubnets,
+        );
+      } else {
+        final trackedSubnets = <String>[];
         if (onSplitTunnelEnabled != null) {
-          try {
-            await onSplitTunnelEnabled(
-              sanitizedSubnets,
-              currentGateway,
-              currentIface,
-            );
-          } catch (_) {
-            // No interrumpir la conexión si falla el registro de limpieza.
-          }
-        }
-
-        await Future<void>.delayed(const Duration(milliseconds: 600));
-        final missingRoutes = await routeManager.verifyRoutes(
-          hospitalSubnets: sanitizedSubnets,
-          gateway: currentGateway,
-          interfaceName: currentIface,
-        );
-
-        if (missingRoutes.isNotEmpty) {
-          throw RouteConfigurationException(
-            _t.errorRoutesMissing(missingRoutes.join(', ')),
-          );
-        }
-
-        yield WorkflowState(
-            step: ConnectionStep.preLaunch,
-            logMessage: _t.logWorkflowRoutesVerified);
-      } on RouteConfigurationException catch (e) {
-        const fallbackPlatforms = {
-          TargetPlatform.android,
-          TargetPlatform.iOS,
-          TargetPlatform.macOS,
-        };
-        if (!fallbackPlatforms.contains(defaultTargetPlatform)) {
-          rethrow;
-        }
-        var rolledBack = false;
-        try {
-          await routeManager.disableSplitTunnel();
-          rolledBack = true;
-        } catch (_) {
-          // La limpieza es best-effort; en móvil o macOS puede no haber rutas.
-        }
-        if (rolledBack || !splitTunnelEnabledThisAttempt) {
-          if (onSplitTunnelUnavailable != null) {
+          for (final subnet in sanitizedSubnets) {
             try {
-              await onSplitTunnelUnavailable();
+              final missingRoutes = await routeManager.verifyRoutes(
+                hospitalSubnets: [subnet],
+                gateway: currentGateway,
+                interfaceName: currentIface,
+              );
+              if (missingRoutes.isNotEmpty) trackedSubnets.add(subnet);
             } catch (_) {
-              // La UI ya no debe bloquear la siguiente conexión.
+              // If the pre-check fails, do not persist a cleanup record:
+              // deleting a route that already existed is worse than leaving
+              // one of ours behind after a crash.
             }
           }
         }
-        if (rolledBack &&
-            splitTunnelEnabledThisAttempt &&
-            onSplitTunnelRolledBack != null) {
-          try {
-            await onSplitTunnelRolledBack();
-          } catch (_) {
-            // El rollback de red ya se completó; el registro es secundario.
-          }
-        }
-        splitTunnelEnabledThisAttempt = false;
-        splitTunnelSetupAttempted = false;
+
         yield WorkflowState(
-          step: ConnectionStep.preLaunch,
-          logMessage: _t.logWorkflowTunnelUnavailable('$e'),
-          isError: true,
+          step: ConnectionStep.splitTunnel,
+          logMessage: _t.logWorkflowStepTunnel(sanitizedSubnets.length),
         );
+
+        try {
+          splitTunnelSetupAttempted = true;
+          final splitMsg = await routeManager.enableSplitTunnel(
+            hospitalSubnets: sanitizedSubnets,
+            gateway: currentGateway,
+            interfaceName: currentIface,
+          );
+
+          yield WorkflowState(
+              step: ConnectionStep.splitTunnel, logMessage: splitMsg);
+          splitTunnelEnabledThisAttempt = true;
+
+          if (onSplitTunnelEnabled != null) {
+            try {
+              await onSplitTunnelEnabled(
+                trackedSubnets,
+                currentGateway,
+                currentIface,
+              );
+            } catch (_) {
+              // No interrumpir la conexión si falla el registro de limpieza.
+            }
+          }
+
+          await Future<void>.delayed(const Duration(milliseconds: 600));
+          final missingRoutes = await routeManager.verifyRoutes(
+            hospitalSubnets: sanitizedSubnets,
+            gateway: currentGateway,
+            interfaceName: currentIface,
+          );
+
+          if (missingRoutes.isNotEmpty) {
+            throw RouteConfigurationException(
+              _t.errorRoutesMissing(missingRoutes.join(', ')),
+            );
+          }
+
+          yield WorkflowState(
+              step: ConnectionStep.preLaunch,
+              logMessage: _t.logWorkflowRoutesVerified);
+        } on MedLinkException catch (e) {
+          // Android reports missing root as PrivilegeRequiredException; iOS and
+          // macOS report unsupported route changes as RouteConfigurationException.
+          // All three platforms can still launch RDP over the existing network.
+          final isFallbackError = e is RouteConfigurationException ||
+              e is PrivilegeRequiredException;
+          const fallbackPlatforms = {
+            TargetPlatform.android,
+            TargetPlatform.iOS,
+            TargetPlatform.macOS,
+          };
+          if (!isFallbackError ||
+              !fallbackPlatforms.contains(defaultTargetPlatform)) {
+            rethrow;
+          }
+          var rolledBack = false;
+          try {
+            await routeManager.disableSplitTunnel();
+            rolledBack = true;
+          } catch (_) {
+            // La limpieza es best-effort; en móvil o macOS puede no haber rutas.
+          }
+          if (rolledBack || !splitTunnelEnabledThisAttempt) {
+            if (onSplitTunnelUnavailable != null) {
+              try {
+                await onSplitTunnelUnavailable();
+              } catch (_) {
+                // La UI ya no debe bloquear la siguiente conexión.
+              }
+            }
+          }
+          if (rolledBack &&
+              splitTunnelEnabledThisAttempt &&
+              onSplitTunnelRolledBack != null) {
+            try {
+              await onSplitTunnelRolledBack();
+            } catch (_) {
+              // El rollback de red ya se completó; el registro es secundario.
+            }
+          }
+          splitTunnelEnabledThisAttempt = false;
+          splitTunnelSetupAttempted = false;
+          yield WorkflowState(
+            step: ConnectionStep.preLaunch,
+            logMessage: _t.logWorkflowTunnelUnavailable('$e'),
+            isError: true,
+          );
+        }
       }
 
       if (onSelectServer != null) {

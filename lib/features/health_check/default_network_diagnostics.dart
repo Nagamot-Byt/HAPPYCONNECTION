@@ -9,8 +9,19 @@ import 'package:medlink_connect/core/network_diagnostics.dart';
 /// channel.
 @LazySingleton(as: NetworkDiagnostics)
 class DefaultNetworkDiagnostics implements NetworkDiagnostics {
+  DefaultNetworkDiagnostics() : _probeTimeout = _defaultProbeTimeout;
+
+  /// Test-only constructor with a shorter timeout.
+  DefaultNetworkDiagnostics.withProbeTimeout(this._probeTimeout);
+
   static const _channel =
       MethodChannel('com.medlinkconnect/network_diagnostics');
+
+  // Native ping probes (Linux/macOS/Android: 4 probes x 2s) and multi-address
+  // TCP connects can take longer than 4s, so the Dart timeout must be higher
+  // than the worst-case native probe to avoid reporting false timeouts.
+  static const _defaultProbeTimeout = Duration(seconds: 10);
+  final Duration _probeTimeout;
 
   String? _lastProbeError;
 
@@ -59,8 +70,8 @@ class DefaultNetworkDiagnostics implements NetworkDiagnostics {
   Future<int?> ping(String host) async {
     _lastProbeError = null;
     try {
-      final result = await _channel.invokeMethod<int>(
-          'ping', {'host': host}).timeout(const Duration(seconds: 4));
+      final result = await _channel
+          .invokeMethod<int>('ping', {'host': host}).timeout(_probeTimeout);
       return result;
     } on TimeoutException {
       _lastProbeError = 'timeout';
@@ -79,25 +90,38 @@ class DefaultNetworkDiagnostics implements NetworkDiagnostics {
 
   @override
   Future<int?> checkTcpPort(String host, int port) async {
-    _lastProbeError = null;
+    final result = await checkTcpPortDetailed(host, port);
+    return result.value;
+  }
+
+  @override
+  Future<NetworkProbeResult<int>> checkTcpPortDetailed(
+    String host,
+    int port,
+  ) async {
     try {
       final result = await _channel.invokeMethod<int>('checkTcpPort', {
         'host': host,
         'port': port,
-      }).timeout(const Duration(seconds: 4));
-      return result;
+      }).timeout(_probeTimeout);
+      _lastProbeError = null;
+      return NetworkProbeResult(value: result);
     } on TimeoutException {
-      _lastProbeError = 'timeout';
-      return null;
+      const error = 'timeout';
+      _lastProbeError = error;
+      return const NetworkProbeResult(error: error);
     } on MissingPluginException {
-      _lastProbeError = 'diagnostics_not_available';
-      return null;
+      const error = 'diagnostics_not_available';
+      _lastProbeError = error;
+      return const NetworkProbeResult(error: error);
     } on PlatformException catch (e) {
-      _lastProbeError = '${e.code}: ${e.message}';
-      return null;
+      final error = '${e.code}: ${e.message}';
+      _lastProbeError = error;
+      return NetworkProbeResult(error: error);
     } catch (e) {
-      _lastProbeError = e.toString();
-      return null;
+      final error = e.toString();
+      _lastProbeError = error;
+      return NetworkProbeResult(error: error);
     }
   }
 }

@@ -33,7 +33,7 @@ class SettingsStorage {
 
   SettingsStorage(this.prefs)
       : _secure = const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
+          aOptions: AndroidOptions(),
           wOptions: WindowsOptions(),
         );
 

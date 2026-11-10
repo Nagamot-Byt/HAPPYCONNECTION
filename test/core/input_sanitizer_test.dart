@@ -48,11 +48,25 @@ void main() {
       expect(InputSanitizer.sanitizeCidr('192.168.1.1'), '192.168.1.1');
     });
 
+    test('canonicalizes host bits to the network address', () {
+      expect(InputSanitizer.sanitizeCidr('10.5.4.1/24'), '10.5.4.0/24');
+      expect(
+          InputSanitizer.sanitizeCidr('192.168.1.200/25'), '192.168.1.128/25');
+      expect(InputSanitizer.sanitizeCidr(' 172.16.5.4/12 '), '172.16.0.0/12');
+    });
+
     test('rejects out of range prefix', () {
       expect(() => InputSanitizer.sanitizeCidr('10.0.0.0/33'),
           throwsArgumentError);
       expect(() => InputSanitizer.sanitizeCidr('10.0.0.0/-1'),
           throwsArgumentError);
+    });
+
+    test('rejects the default route prefix /0', () {
+      expect(
+          () => InputSanitizer.sanitizeCidr('0.0.0.0/0'), throwsArgumentError);
+      expect(
+          () => InputSanitizer.sanitizeCidr('10.0.0.0/0'), throwsArgumentError);
     });
 
     test('rejects injection in CIDR', () {
@@ -74,6 +88,28 @@ void main() {
           throwsArgumentError);
       expect(() => InputSanitizer.sanitizeHostname('`whoami`.domain.com'),
           throwsArgumentError);
+    });
+
+    test('rejects malformed DNS labels and oversized names', () {
+      for (final host in [
+        'server..huv.gov.co',
+        '-server.huv.gov.co',
+        'server-.huv.gov.co',
+        'server.',
+      ]) {
+        expect(() => InputSanitizer.sanitizeHostname(host), throwsArgumentError,
+            reason: host);
+      }
+      expect(
+        () => InputSanitizer.sanitizeHostname('${'a' * 64}.huv.gov.co'),
+        throwsArgumentError,
+      );
+      expect(
+        () => InputSanitizer.sanitizeHostname(
+          List.filled(5, 'a' * 63).join('.'),
+        ),
+        throwsArgumentError,
+      );
     });
   });
 
@@ -168,6 +204,22 @@ void main() {
 
     test('rejects empty list', () {
       expect(() => InputSanitizer.sanitizeSubnets([]), throwsArgumentError);
+    });
+
+    test('allows an empty list when the platform does not configure routes',
+        () {
+      expect(InputSanitizer.sanitizeSubnets([], allowEmpty: true), isEmpty);
+    });
+
+    test('deduplicates canonical subnets preserving first-seen order', () {
+      final result = InputSanitizer.sanitizeSubnets([
+        '10.1.2.3/8',
+        '172.16.5.4/12',
+        '10.0.0.0/8',
+      ]);
+
+      expect(result, ['10.0.0.0/8', '172.16.0.0/12']);
+      expect(() => result.add('192.168.0.0/16'), throwsUnsupportedError);
     });
   });
 }

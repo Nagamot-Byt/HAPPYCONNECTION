@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:medlink_connect/core/exceptions.dart';
@@ -46,6 +48,61 @@ void main() {
 
     expect(await diagnostics.checkTcpPort('10.0.0.1', 3389), isNull);
     expect(diagnostics.lastProbeError, 'timeout: agotado');
+  });
+
+  test('checkTcpPortDetailed keeps success and error tied to the probe',
+      () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'checkTcpPort');
+      return 7;
+    });
+
+    final success = await diagnostics.checkTcpPortDetailed('10.0.0.1', 3389);
+
+    expect(success.value, 7);
+    expect(success.error, isNull);
+    expect(success.succeeded, isTrue);
+    expect(diagnostics.lastProbeError, isNull);
+  });
+
+  test('checkTcpPortDetailed reports its own timeout cause', () async {
+    final fastDiagnostics = DefaultNetworkDiagnostics.withProbeTimeout(
+      const Duration(milliseconds: 20),
+    );
+    messenger.setMockMethodCallHandler(channel, (call) {
+      return Completer<int>().future;
+    });
+
+    final failure =
+        await fastDiagnostics.checkTcpPortDetailed('10.0.0.1', 3389);
+
+    expect(failure.value, isNull);
+    expect(failure.error, 'timeout');
+    expect(failure.succeeded, isFalse);
+  });
+
+  test('ping times out at the configured probe timeout', () async {
+    final fastDiagnostics = DefaultNetworkDiagnostics.withProbeTimeout(
+      const Duration(milliseconds: 20),
+    );
+    messenger.setMockMethodCallHandler(channel, (call) {
+      return Completer<int>().future;
+    });
+
+    expect(await fastDiagnostics.ping('10.0.0.1'), isNull);
+    expect(fastDiagnostics.lastProbeError, 'timeout');
+  });
+
+  test('checkTcpPort times out at the configured probe timeout', () async {
+    final fastDiagnostics = DefaultNetworkDiagnostics.withProbeTimeout(
+      const Duration(milliseconds: 20),
+    );
+    messenger.setMockMethodCallHandler(channel, (call) {
+      return Completer<int>().future;
+    });
+
+    expect(await fastDiagnostics.checkTcpPort('10.0.0.1', 3389), isNull);
+    expect(fastDiagnostics.lastProbeError, 'timeout');
   });
 
   test('flushDns maps permission errors to a typed exception', () async {

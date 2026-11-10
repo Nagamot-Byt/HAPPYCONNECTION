@@ -21,6 +21,28 @@ class MockRdpLauncher extends Mock implements RdpLauncher {}
 
 class MockWifiManager extends Mock implements WifiManager {}
 
+void _stubSuccessfulRdp(
+  MockNetworkDiagnostics diagnostics,
+  MockRdpLauncher launcher, {
+  String host = '192.168.1.100',
+  int port = 3389,
+  int latency = 25,
+}) {
+  when(() => diagnostics.ping(host)).thenAnswer((_) async => 20);
+  when(() => diagnostics.checkTcpPort(host, port))
+      .thenAnswer((_) async => latency);
+  when(() => launcher.isRdpClientAvailable()).thenAnswer((_) async => true);
+  when(() => launcher.preLaunch()).thenAnswer((_) async => true);
+  when(() => launcher.launchRdp(
+        host: host,
+        port: port,
+        username: null,
+        domain: null,
+        profile: 'adaptive',
+        measuredLatencyMs: latency,
+      )).thenAnswer((_) async => 'RDP Launched');
+}
+
 void main() {
   late MockRouteManager mockRouteManager;
   late MockNetworkDiagnostics mockNetworkDiagnostics;
@@ -60,6 +82,8 @@ void main() {
   });
 
   test('Happy path connection flow emits expected steps', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
       (_) async => const WifiConnectionInfo(
         ssid: 'HUV_WIFI',
@@ -72,11 +96,15 @@ void main() {
           gateway: '192.168.1.1',
           interfaceName: 'Wi-Fi',
         )).thenAnswer((_) async => 'Routes added');
+    var verifyCalls = 0;
     when(() => mockRouteManager.verifyRoutes(
           hospitalSubnets: ['10.0.0.0/8'],
           gateway: '192.168.1.1',
           interfaceName: 'Wi-Fi',
-        )).thenAnswer((_) async => []);
+        )).thenAnswer((_) async {
+      verifyCalls++;
+      return verifyCalls == 1 ? ['10.0.0.0/8'] : <String>[];
+    });
     when(() => mockNetworkDiagnostics.ping('192.168.1.100'))
         .thenAnswer((_) async => 20);
     when(() => mockNetworkDiagnostics.checkTcpPort('192.168.1.100', 3389))
@@ -121,7 +149,54 @@ void main() {
     expect(states.last.isError, isFalse);
   });
 
+  test('desktop pre-check records only routes that were missing', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8', '172.16.0.0/12'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => 'Routes added');
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => const <String>[]);
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: ['172.16.0.0/12'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => ['172.16.0.0/12']);
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: ['10.0.0.0/8', '172.16.0.0/12'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => const <String>[]);
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    List<String>? cleanupSubnets;
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8', '172.16.0.0/12'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+      onSplitTunnelEnabled: (subnets, gateway, iface) async {
+        cleanupSubnets = subnets;
+      },
+    ).toList();
+
+    expect(cleanupSubnets, ['172.16.0.0/12']);
+    expect(states.last.step, ConnectionStep.done);
+  });
+
   test('Wi-Fi failure prevents route and RDP operations', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
       (_) async => const WifiConnectionInfo(
         ssid: 'OtraRed',
@@ -153,6 +228,8 @@ void main() {
   });
 
   test('Wi-Fi connection can start without a gateway or interface', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
       (_) async => const WifiConnectionInfo(
         ssid: '',
@@ -186,6 +263,8 @@ void main() {
   });
 
   test('SSIDs with trailing spaces are passed through unchanged', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
       (_) async => const WifiConnectionInfo(
         ssid: '',
@@ -236,6 +315,86 @@ void main() {
 
     expect(states.last.step, ConnectionStep.error);
     verify(() => mockRouteManager.disableSplitTunnel()).called(1);
+  });
+
+  test('Android permission error falls back to RDP without split tunnel',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenThrow(
+      const PrivilegeRequiredException('se requiere ROOT (su)'),
+    );
+    when(() => mockRouteManager.disableSplitTunnel()).thenThrow(
+      const PrivilegeRequiredException('Requiere sudo.'),
+    );
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    var unavailable = false;
+    var rolledBack = false;
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+      onSplitTunnelUnavailable: () async {
+        unavailable = true;
+      },
+      onSplitTunnelRolledBack: () async {
+        rolledBack = true;
+      },
+    ).toList();
+
+    expect(unavailable, isTrue);
+    expect(rolledBack, isFalse);
+    expect(states.last.step, ConnectionStep.done);
+    expect(states.last.isError, isFalse);
+  });
+
+  test('privilege errors still abort on desktop platforms', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenThrow(
+      const PrivilegeRequiredException('se requiere Administrador'),
+    );
+    when(() => mockRouteManager.disableSplitTunnel())
+        .thenAnswer((_) async => 'Rolled back');
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+    ).toList();
+
+    expect(states.last.step, ConnectionStep.error);
+    expect(states.last.errorType, MedLinkErrorType.permission);
+    verifyNever(() => mockRdpLauncher.launchRdp(
+          host: any(named: 'host'),
+          port: any(named: 'port'),
+          username: any(named: 'username'),
+          domain: any(named: 'domain'),
+          useWebFeed: any(named: 'useWebFeed'),
+          profile: any(named: 'profile'),
+          measuredLatencyMs: any(named: 'measuredLatencyMs'),
+        ));
   });
 
   test('iOS fallback marks the tunnel unavailable without a cleanup record',
@@ -416,6 +575,8 @@ void main() {
   });
 
   test('Missing Wi-Fi plugin falls back to the current network', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
     when(() => mockWifiManager.getCurrentConnectionInfo())
         .thenThrow(MissingPluginException('no wifi'));
     when(() => mockRouteManager.enableSplitTunnel(
@@ -538,6 +699,173 @@ void main() {
     expect(states.last.step, ConnectionStep.error);
     expect(rolledBack, isFalse);
     verify(() => mockRouteManager.disableSplitTunnel()).called(1);
+  });
+
+  test('refreshes gateway and interface after connecting to another Wi-Fi',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    var infoCalls = 0;
+    when(() => mockWifiManager.getCurrentConnectionInfo())
+        .thenAnswer((_) async {
+      infoCalls++;
+      if (infoCalls == 1) {
+        return const WifiConnectionInfo(
+          ssid: 'OtraRed',
+          interfaceName: 'wlan0',
+          gateway: '192.168.1.1',
+        );
+      }
+      return const WifiConnectionInfo(
+        ssid: 'HUV_WIFI',
+        interfaceName: 'wlan0',
+        gateway: '10.0.0.1',
+      );
+    });
+    when(() => mockWifiManager.connect(ssid: 'HUV_WIFI', password: null))
+        .thenAnswer((_) async => 'ok');
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '10.0.0.1',
+          interfaceName: 'wlan0',
+        )).thenAnswer((_) async => 'Routes added');
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '10.0.0.1',
+          interfaceName: 'wlan0',
+        )).thenAnswer((_) async => []);
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: 'HUV_WIFI',
+      gateway: '192.168.1.1',
+      iface: 'wlan0',
+      resolvedPort: 3389,
+    ).toList();
+
+    verify(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '10.0.0.1',
+          interfaceName: 'wlan0',
+        )).called(1);
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('ignores the default route from a non Wi-Fi interface', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
+      (_) async => const WifiConnectionInfo(
+        ssid: 'HUV_WIFI',
+        interfaceName: 'wlan0',
+        gateway: '',
+      ),
+    );
+    when(() => mockRouteManager.getPrimaryDefaultRouteInfo()).thenAnswer(
+      (_) async => {'gateway': '192.168.1.1', 'interfaceName': 'eth0'},
+    );
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: 'HUV_WIFI',
+      gateway: '',
+      iface: '',
+      resolvedPort: 3389,
+    ).toList();
+
+    expect(states.last.step, ConnectionStep.error);
+    expect(states.last.errorType, MedLinkErrorType.route);
+    verifyNever(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: any(named: 'hospitalSubnets'),
+          gateway: any(named: 'gateway'),
+          interfaceName: any(named: 'interfaceName'),
+        ));
+  });
+
+  test('Apple platforms continue without gateway or interface', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
+      (_) async => const WifiConnectionInfo(
+        ssid: 'HUV_WIFI',
+        interfaceName: '',
+        gateway: '',
+      ),
+    );
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '',
+          interfaceName: '',
+        )).thenThrow(
+      const RouteConfigurationException('requiere NetworkExtension'),
+    );
+    when(() => mockRouteManager.disableSplitTunnel())
+        .thenAnswer((_) async => 'Sin rutas activas');
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: 'HUV_WIFI',
+      gateway: '',
+      iface: '',
+      resolvedPort: 3389,
+    ).toList();
+
+    expect(states.last.step, ConnectionStep.done);
+    verify(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '',
+          interfaceName: '',
+        )).called(1);
+  });
+
+  test('Apple and Android continue without subnets, gateway or Wi-Fi',
+      () async {
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+      final states = await workflowService.connect(
+        subnets: const [],
+        host: '192.168.1.100',
+        user: '',
+        domain: '',
+        selectedWifi: 'HUV_WIFI',
+        gateway: '',
+        iface: '',
+        resolvedPort: 3389,
+      ).toList();
+
+      expect(states.last.step, ConnectionStep.done, reason: '$platform');
+      expect(
+        states.map((state) => state.logMessage),
+        contains(AppLocalizationsEs().logWorkflowNoSubnets),
+      );
+      verifyNever(() => mockRouteManager.enableSplitTunnel(
+            hospitalSubnets: any(named: 'hospitalSubnets'),
+            gateway: any(named: 'gateway'),
+            interfaceName: any(named: 'interfaceName'),
+          ));
+      verifyNever(() => mockWifiManager.getCurrentConnectionInfo());
+      verifyNever(() => mockWifiManager.connect(
+            ssid: any(named: 'ssid'),
+            password: any(named: 'password'),
+          ));
+    }
   });
 
   test('Sanitization failure emits error step immediately', () async {

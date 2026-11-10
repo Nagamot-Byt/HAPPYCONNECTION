@@ -44,6 +44,10 @@ dist/**/*.msi
 dist/**/*.app
 dist/**/*.zip
 
+# Checksums de binarios locales: se regeneran con cada build/paquetado y se
+# publican como artefacto de release, no son fuente
+dist/**/SHA256SUMS*.txt
+
 # Mantener solo scripts/guías de distribución
 !dist/**/README*.txt
 !dist/**/instalar*.*

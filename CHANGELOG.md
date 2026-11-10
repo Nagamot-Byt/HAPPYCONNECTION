@@ -18,6 +18,21 @@ Todas las versiones relevantes de MedLink Connect.
   depuración para builds locales.
 - Auditoría de conectividad y estado del proyecto con calificación 834/1000:
   `docs/audits/AUDITORIA_2026-11-09.md`.
+- Job `build-android` en CI (Java 17 + Flutter 3.27.4) que compila
+  `flutter build apk --release` y publica el APK como artefacto, para validar
+  Android en cada push/PR sin depender de un SDK local.
+- Suite ampliada a 249 pruebas con cobertura de líneas del 99,18 %: cubre el
+  arranque `main()`, el flujo completo de pasos del workflow, el diálogo de
+  restablecer ajustes, fallos de DNS/ICMP/TCP con causa, selección de servidor
+  con error, cliente/manejador RDP ausente, Wi-Fi que nunca confirma, fallback
+  de gateway y `checkTcpPortDetailed`.
+
+### Cambiado
+
+- `flutter_secure_storage` migrado de 9.2.4 a 10.3.4: el backend macOS pasa a
+  `flutter_secure_storage_darwin` (el paquete `..._macos` está discontinuado) y
+  se retira `encryptedSharedPreferences` (obsoleto en Android). La API de
+  `SettingsStorage` no cambia.
 
 ### Eliminado
 
@@ -31,6 +46,8 @@ Todas las versiones relevantes de MedLink Connect.
 
 ### Corregido
 
+- Un escaneo Wi-Fi fallido ya no deja SSIDs obsoletos en la lista: el estado se
+  vacía y la UI no ofrece redes que podrían no existir (CON-05).
 - El fallback sin túnel dividido en Android ahora captura
   `PrivilegeRequiredException` (falta de root) y continúa con RDP sobre la red
   existente en lugar de abortar.

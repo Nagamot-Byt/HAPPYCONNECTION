@@ -194,13 +194,13 @@ validación en hardware hospitalario real pendiente.
 | CON-02 | Media | macOS sin helper privilegiado / iOS sin NetworkExtension | `MainFlutterWindow.swift`, `AppDelegate.swift` | Fuera de alcance del release (SEC-04/05) |
 | CON-03 | Baja | Linux depende del handler `rdp://` del sistema | `linux/runner/rdp_launcher_plugin.cc` | Manejado con error claro |
 | CON-04 | Baja | Tiempos fijos de verificación (600/800 ms) | workflow + `DefaultRouteManager` | Aceptable; no configurable |
-| CON-05 | Baja | Escaneo Wi-Fi fallido no vacía la lista previa | `HomeController.refreshWifiNetworks` | Abierto (menor) |
-| CON-06 | Media | Sin validación de build Android en CI ni local | `.github/workflows/`, falta de SDK | Abierto: validar con scripts o añadir job CI |
+| CON-05 | Baja | Escaneo Wi-Fi fallido no vacía la lista previa | `HomeController.refreshWifiNetworks` | **Corregido** (addendum) |
+| CON-06 | Media | Sin validación de build Android en CI ni local | `.github/workflows/`, falta de SDK | **Corregido** (job `build-android`; hardware pendiente) |
 | EST-01 | Media | Stub RDP nativo empaquetado sin uso | `android/app/src/main/cpp/` | **Corregido** en esta auditoría |
 | EST-02 | Media | 41 archivos del bloque de verificación sin commit | `git status` | **Corregido**: commits de fix/build/test/docs |
-| EST-03 | Media | Backend macOS de `flutter_secure_storage` discontinuado | `pubspec.lock` | Diferido al próximo ciclo (decisión) |
+| EST-03 | Media | Backend macOS de `flutter_secure_storage` discontinuado | `pubspec.lock` | **Corregido**: migrado a 10.3.4 (addendum) |
 | EST-04 | Baja | `HomeController` monolítico | `home_controller.dart` | ARQ-01 vigente, mitigado parcialmente |
-| EST-05 | Baja | Módulos bajo 85 % de cobertura | `lcov.info` | Seguir en próximos ciclos |
+| EST-05 | Baja | Módulos bajo 85 % de cobertura | `lcov.info` | **Corregido**: 99,18 % global (addendum) |
 | CMP-01 | Baja | `intl`/`flutter_lints` fijados por Flutter 3.27 | `pubspec.yaml` | Correcto; reconsiderar al migrar Flutter |
 
 ## 7. Plan de acción
@@ -225,3 +225,37 @@ validación en hardware hospitalario real pendiente.
 2. Cobertura de `network_diagnostics`, `main`, `settings_storage`, `home_screen`.
 3. Extraer más estado de `HomeController` (ARQ-01).
 4. Evaluar bump de Flutter (desbloquearía `intl`/`flutter_lints`).
+
+
+## 8. Addendum de mejoras (mismo día)
+
+Tras cerrar la auditoría se aplicó el plan P1/P2 completo (salvo la decisión
+estratégica de VpnService Android / helper macOS, que queda fuera de alcance):
+
+| Mejora | Evidencia |
+|---|---|
+| CON-05: un escaneo Wi-Fi fallido vacía la lista de SSIDs | `HomeController.refreshWifiNetworks` + prueba `a failed rescan drops the previous SSID list` |
+| Cobertura de los 5 módulos rezagados al 100 % | `main`, `network_diagnostics`, `settings_storage`, `home_screen`, `connection_workflow_service` |
+| Suite de pruebas ampliada | 249 pruebas, cobertura de líneas **99,18 %** (5564/5610) |
+| Migración `flutter_secure_storage` 9.2.4 → 10.3.4 | `pubspec.yaml`/`pubspec.lock`, backend `..._darwin`, sin `encryptedSharedPreferences` |
+| CI Android con Java 17 y artefacto APK | `.github/workflows/flutter_ci.yml` (job `build-android`) |
+
+### Re-calificación
+
+| Área | Peso | Antes | Ahora |
+|---|---:|---:|---:|
+| Conectividad Windows (flujo principal) | 280 | 250 | 250 |
+| Conectividad Linux | 160 | 140 | 140 |
+| Conectividad Android | 110 | 70 | 74 |
+| Conectividad iOS/macOS (fallback) | 80 | 50 | 50 |
+| Diagnóstico, auto-selección y recuperación | 120 | 105 | 112 |
+| Integridad de código y pruebas | 170 | 157 | 165 |
+| Compatibilidad, build y CI | 80 | 62 | 72 |
+| **Total** | **1000** | **834** | **863** |
+
+**Calificación global actualizada: 863 / 1000 (86,3 %).**
+
+Pendiente para superar 900: validación en hardware hospitalario real (Wi-Fi,
+elevación Windows, `sudo -n`/`pkexec` Linux), build APK verificado en CI con
+SDK real, y la decisión estratégica de túnel en Android (VpnService) / helper
+privilegiado en macOS.

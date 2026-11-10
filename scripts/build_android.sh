@@ -71,5 +71,9 @@ log "Artefactos generados en dist/Android"
 ls -lh "$DIST_DIR"
 printf '\nInstala el APK en el telefono copiandolo y abriendolo, o con:\n'
 printf '  adb install -r dist/Android/MedLinkConnect_%s.apk\n' "$VERSION"
-printf '\nNota: la configuración actual firma release con la clave de debug.\n'
-printf 'Para distribución real configura un keystore en android/key.properties.\n'
+if [ -f "$ROOT_DIR/android/key.properties" ]; then
+  printf '\nFirma: release configurada con android/key.properties.\n'
+else
+  printf '\nADVERTENCIA: no existe android/key.properties; el APK/AAB se firmó con la clave de debug.\n'
+  printf 'Para distribución real copia android/key.properties.example y configura tu keystore.\n'
+fi

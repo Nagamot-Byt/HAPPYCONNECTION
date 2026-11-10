@@ -20,6 +20,11 @@ coverage/
 .dbg/
 *.log
 
+# Android release signing (never commit real keystores or passwords)
+android/key.properties
+android/*.jks
+android/*.keystore
+
 # Clon/duplicado local del proyecto (no forma parte de este repo)
 /medlink_connect/
 

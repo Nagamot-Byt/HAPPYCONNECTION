@@ -58,8 +58,13 @@ echo   - MedLinkConnect_%VERSION%.apk
 echo   - MedLinkConnect_%VERSION%.aab
 echo ========================================================
 echo.
-echo Nota: release usa la clave de debug. Configura un keystore
-echo en android\key.properties para distribucion real.
+if exist "%ROOT%\android\key.properties" (
+  echo Firma: release configurada con android\key.properties.
+) else (
+  echo ADVERTENCIA: no existe android\key.properties; el APK/AAB se firmo
+  echo con la clave de debug. Copia android\key.properties.example y configura
+  echo tu keystore para distribucion real.
+)
 echo.
 popd >nul
 pause

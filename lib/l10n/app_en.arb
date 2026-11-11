@@ -280,6 +280,17 @@
       }
     }
   },
+  "logWorkflowFinalRoutes": "Ensured /32 routes for the selected server {host} ({routes}).",
+  "@logWorkflowFinalRoutes": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "routes": {
+        "type": "String"
+      }
+    }
+  },
   "logWorkflowStepTunnel": "Step 2/4 — Enabling split tunnel for {count} subnet(s)",
   "@logWorkflowStepTunnel": {
     "placeholders": {

@@ -1013,6 +1013,9 @@ class HomeController extends ChangeNotifier {
         gateway: gateway,
         iface: iface,
         resolvedPort: port,
+        candidateHosts: shouldAutoSelect
+            ? serverPresets.map((preset) => preset.host).toList(growable: false)
+            : const [],
         rdpProfile: rdpProfile,
         wifiPassword: wifiPasswordCtrl.text,
         onSelectServer: shouldAutoSelect

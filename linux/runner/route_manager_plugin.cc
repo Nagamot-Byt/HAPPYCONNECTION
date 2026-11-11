@@ -133,6 +133,39 @@ bool route_exists_any(const std::string& destination) {
   return found;
 }
 
+// A route already present on the target interface is usable for the split
+// tunnel even when its gateway differs from the one currently detected.
+bool route_exists_on_interface(const std::string& destination,
+                               const std::string& interface_name) {
+  gchar* out = nullptr;
+  gchar* err = nullptr;
+  gint exit_code = 0;
+  const gboolean ran = run_program({"ip", "route", "show", destination}, &out,
+                                   &err, &exit_code);
+  bool found = false;
+  if (ran && exit_code == 0 && out) {
+    gchar** lines = g_strsplit(out, "\n", -1);
+    for (gchar** line = lines; line && *line; ++line) {
+      const auto tokens = split_route_line(*line);
+      if (tokens.empty() ||
+          !destination_matches(tokens.front(), destination)) {
+        continue;
+      }
+      for (size_t i = 0; i + 1 < tokens.size(); ++i) {
+        if (tokens[i] == "dev" && tokens[i + 1] == interface_name) {
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+    g_strfreev(lines);
+  }
+  g_free(out);
+  g_free(err);
+  return found;
+}
+
 bool delete_route_exact(const std::string& destination,
                         const std::string& gateway,
                         const std::string& interface_name);
@@ -233,6 +266,9 @@ FlMethodResponse* handle_add_route(const gchar* dest,
 
   remove_tracked_for_destination(dest);
   if (route_exists_any(dest)) {
+    if (route_exists_on_interface(dest, iface)) {
+      return success_string("La ruta ya existe para la interfaz indicada.");
+    }
     return error_response(
         "conflicto_ruta",
         std::string("Ya existe una ruta para ") + dest +
@@ -351,7 +387,8 @@ FlMethodResponse* handle_enable_split_tunnel(
       return error_response("argumento_invalido",
                             "No se permite agregar la ruta por defecto /0.");
     }
-    if (!route_exists(dest, gateway, interface_name)) {
+    if (!route_exists(dest, gateway, interface_name) &&
+        !route_exists_on_interface(dest, interface_name)) {
       pending.push_back(dest);
     }
   }
@@ -582,7 +619,8 @@ FlMethodResponse* handle_verify_routes(
   g_autoptr(FlValue) missing = fl_value_new_list();
   for (const auto& subnet : subnets) {
     if (subnet.empty()) continue;
-    if (!route_exists(subnet, gateway, interface_name)) {
+    if (!route_exists(subnet, gateway, interface_name) &&
+        !route_exists_on_interface(subnet, interface_name)) {
       fl_value_append_take(missing, fl_value_new_string(subnet.c_str()));
     }
   }

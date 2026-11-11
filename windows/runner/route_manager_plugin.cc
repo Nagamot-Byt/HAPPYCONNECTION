@@ -127,6 +127,36 @@ static bool RouteExists(const std::wstring& dest_cidr,
   return found;
 }
 
+// A route already present on the target interface is usable for the split
+// tunnel even when its next hop differs from the detected gateway.
+static bool RouteExistsOnInterface(const std::wstring& dest_cidr,
+                                   const std::wstring& iface) {
+  NET_LUID luid;
+  if (!GetInterfaceLuid(iface, luid)) return false;
+
+  SOCKADDR_INET dest_addr{};
+  UINT8 prefix;
+  if (!ParseCIDR(dest_cidr, dest_addr, prefix)) return false;
+
+  PMIB_IPFORWARD_TABLE2 table = nullptr;
+  if (GetIpForwardTable2(AF_INET, &table) != NO_ERROR) return false;
+
+  bool found = false;
+  for (ULONG i = 0; i < table->NumEntries; ++i) {
+    const auto& row = table->Table[i];
+    if (row.DestinationPrefix.PrefixLength != prefix) continue;
+    if (row.DestinationPrefix.Prefix.Ipv4.sin_addr.S_un.S_addr !=
+        dest_addr.Ipv4.sin_addr.S_un.S_addr) {
+      continue;
+    }
+    if (row.InterfaceLuid.Value != luid.Value) continue;
+    found = true;
+    break;
+  }
+  FreeMibTable(table);
+  return found;
+}
+
 static bool RowMatches(const MIB_IPFORWARD_ROW2& row,
                        const SOCKADDR_INET& dest_addr,
                        UINT8 prefix,
@@ -329,6 +359,10 @@ static std::unique_ptr<EncodableValue> HandleAddRoute(
     return std::make_unique<EncodableValue>(
         "La ruta " + dest + " ya existe para la interfaz indicada.");
   }
+  if (RouteExistsOnInterface(wdest, wiface)) {
+    return std::make_unique<EncodableValue>(
+        "La ruta " + dest + " ya existe para la interfaz indicada.");
+  }
 
   if (!IsElevated()) {
     return std::make_unique<EncodableValue>(ErrPair(
@@ -513,7 +547,8 @@ static std::unique_ptr<EncodableValue> HandleEnableSplitTunnel(
           "CIDR inválido en " + *dest_s +
               ". No se permite la ruta por defecto /0."));
     }
-    if (!RouteExists(wdest, wgw, wiface)) {
+    if (!RouteExists(wdest, wgw, wiface) &&
+        !RouteExistsOnInterface(wdest, wiface)) {
       pending.push_back(wdest);
     }
   }
@@ -783,7 +818,10 @@ static std::unique_ptr<EncodableValue> HandleVerifyRoutes(
   for (const auto& entry : *subnets_list) {
     const auto* dest_s = std::get_if<std::string>(&entry);
     if (!dest_s || dest_s->empty()) continue;
-    if (!RouteExists(U8ToW(*dest_s), U8ToW(*gw_str), U8ToW(*iface_str))) {
+    const auto wdest = U8ToW(*dest_s);
+    const auto wiface = U8ToW(*iface_str);
+    if (!RouteExists(wdest, U8ToW(*gw_str), wiface) &&
+        !RouteExistsOnInterface(wdest, wiface)) {
       missing.push_back(EncodableValue(*dest_s));
     }
   }

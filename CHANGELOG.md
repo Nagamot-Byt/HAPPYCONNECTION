@@ -57,6 +57,17 @@ Todas las versiones relevantes de MedLink Connect.
 
 ### Corregido
 
+- La auto-selección del mejor servidor ahora ocurre después de instalar el
+  túnel dividido: se pre-enrutan las rutas `/32` de todos los presets
+  candidatos y, tras elegir, se aseguran las rutas del host final antes de
+  lanzar RDP (P0-1/P0-5).
+- Si el resolver del sistema falla antes de que exista la ruta, las rutas `/32`
+  se resuelven consultando directamente el gateway hospitalario con `nslookup`
+  (timeout corto en Windows/Linux/macOS) (P0-2).
+- Windows y Linux ya no abortan por falta de elevación o por una ruta
+  preexistente: continúan con RDP directo si el servidor responde en TCP, y los
+  gestores de rutas aceptan una ruta existente en la interfaz objetivo
+  (P0-3/P0-4).
 - Un escaneo Wi-Fi fallido ya no deja SSIDs obsoletos en la lista: el estado se
   vacía y la UI no ofrece redes que podrían no existir (CON-05).
 - El fallback sin túnel dividido en Android ahora captura

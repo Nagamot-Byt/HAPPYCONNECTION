@@ -693,6 +693,17 @@
       }
     }
   },
+  "logWorkflowFinalRoutes": "Se aseguraron rutas /32 para el servidor seleccionado {host} ({routes}).",
+  "@logWorkflowFinalRoutes": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "routes": {
+        "type": "String"
+      }
+    }
+  },
   "logWorkflowStepTunnel": "Paso 2/4 — Habilitando túnel dividido para {count} subred(es)",
   "@logWorkflowStepTunnel": {
     "placeholders": {

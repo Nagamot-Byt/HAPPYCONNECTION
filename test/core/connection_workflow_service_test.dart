@@ -377,7 +377,8 @@ void main() {
     expect(states.last.isError, isFalse);
   });
 
-  test('privilege errors still abort on desktop platforms', () async {
+  test('privilege errors fall back to direct RDP on desktop platforms',
+      () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.windows;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
@@ -389,7 +390,54 @@ void main() {
       const PrivilegeRequiredException('se requiere Administrador'),
     );
     when(() => mockRouteManager.disableSplitTunnel())
-        .thenAnswer((_) async => 'Rolled back');
+        .thenThrow(const PrivilegeRequiredException('sin permisos'));
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    var unavailable = false;
+    final states = await workflowService.connect(
+      subnets: ['10.0.0.0/8'],
+      host: '192.168.1.100',
+      user: '',
+      domain: '',
+      selectedWifi: '',
+      gateway: '192.168.1.1',
+      iface: 'Wi-Fi',
+      resolvedPort: 3389,
+      onSplitTunnelUnavailable: () async {
+        unavailable = true;
+      },
+    ).toList();
+
+    expect(unavailable, isTrue);
+    expect(states.last.step, ConnectionStep.done);
+    expect(states.last.isError, isFalse);
+    verify(() => mockRdpLauncher.launchRdp(
+          host: '192.168.1.100',
+          port: 3389,
+          username: null,
+          domain: null,
+          profile: 'adaptive',
+          measuredLatencyMs: 25,
+        )).called(1);
+  });
+
+  test('desktop fallback aborts when the server is unreachable', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.0/8'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenThrow(
+      const PrivilegeRequiredException('se requiere Administrador'),
+    );
+    when(() => mockRouteManager.disableSplitTunnel())
+        .thenThrow(const PrivilegeRequiredException('sin permisos'));
+    when(() => mockNetworkDiagnostics.ping('192.168.1.100'))
+        .thenAnswer((_) async => 20);
+    when(() => mockNetworkDiagnostics.checkTcpPort('192.168.1.100', 3389))
+        .thenAnswer((_) async => null);
 
     final states = await workflowService.connect(
       subnets: ['10.0.0.0/8'],
@@ -403,13 +451,12 @@ void main() {
     ).toList();
 
     expect(states.last.step, ConnectionStep.error);
-    expect(states.last.errorType, MedLinkErrorType.permission);
+    expect(states.last.errorType, MedLinkErrorType.rdp);
     verifyNever(() => mockRdpLauncher.launchRdp(
           host: any(named: 'host'),
           port: any(named: 'port'),
           username: any(named: 'username'),
           domain: any(named: 'domain'),
-          useWebFeed: any(named: 'useWebFeed'),
           profile: any(named: 'profile'),
           measuredLatencyMs: any(named: 'measuredLatencyMs'),
         ));
@@ -530,7 +577,7 @@ void main() {
     expect(states.last.step, ConnectionStep.done);
   });
 
-  test('server selection runs before the split tunnel and updates the target',
+  test('server selection runs after the split tunnel and updates the target',
       () async {
     final order = <String>[];
     when(() => mockRouteManager.enableSplitTunnel(
@@ -579,7 +626,7 @@ void main() {
       },
     ).toList();
 
-    expect(order, ['select', 'enable', 'ping']);
+    expect(order, ['enable', 'select', 'ping']);
     verifyNever(() => mockNetworkDiagnostics.ping('192.168.1.100'));
     verify(() => mockRdpLauncher.launchRdp(
           host: '10.1.2.3',
@@ -631,6 +678,151 @@ void main() {
       states.map((state) => state.logMessage),
       contains(contains('rutas /32')),
     );
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('falls back to the gateway DNS when the system resolver fails',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    workflowService.hostCidrResolver = (host) async => const [];
+    var gatewayQueried = false;
+    workflowService.gatewayDnsResolver = (host, gateway) async {
+      gatewayQueried = true;
+      expect(host, 'localhost');
+      expect(gateway, '192.168.1.1');
+      return ['10.1.2.3/32'];
+    };
+
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.1.2.3/32'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => 'Routes added');
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: ['10.1.2.3/32'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => <String>[]);
+    _stubSuccessfulRdp(
+      mockNetworkDiagnostics,
+      mockRdpLauncher,
+      host: 'localhost',
+    );
+
+    final states = await workflowService
+        .connect(
+          host: 'localhost',
+          user: '',
+          domain: '',
+          selectedWifi: '',
+          gateway: '192.168.1.1',
+          iface: 'Wi-Fi',
+          resolvedPort: 3389,
+        )
+        .toList();
+
+    expect(gatewayQueried, isTrue);
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('pre-routes every candidate host before selecting the best server',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    workflowService.hostCidrResolver =
+        (host) async => host == 'localhost' ? ['10.0.0.1/32'] : const [];
+
+    final order = <String>[];
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: any(named: 'hospitalSubnets'),
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((invocation) async {
+      order.add('enable');
+      final subnets =
+          invocation.namedArguments[#hospitalSubnets] as List<String>;
+      expect(subnets, containsAll(<String>['10.0.0.1/32', '127.0.0.1/32']));
+      return 'Routes added';
+    });
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: any(named: 'hospitalSubnets'),
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => <String>[]);
+    _stubSuccessfulRdp(
+      mockNetworkDiagnostics,
+      mockRdpLauncher,
+      host: '127.0.0.1',
+    );
+
+    final states = await workflowService
+        .connect(
+          host: 'localhost',
+          candidateHosts: const ['127.0.0.1'],
+          user: '',
+          domain: '',
+          selectedWifi: '',
+          gateway: '192.168.1.1',
+          iface: 'Wi-Fi',
+          resolvedPort: 3389,
+          onSelectServer: () async {
+            order.add('select');
+            return (host: '127.0.0.1', port: 3389);
+          },
+        )
+        .toList();
+
+    expect(order, ['enable', 'select']);
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('adds routes for the selected host when it was not pre-routed',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    workflowService.hostCidrResolver =
+        (host) async => host == 'localhost' ? ['10.0.0.1/32'] : const [];
+
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.0.0.1/32'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => 'Initial routes');
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.9.9.9/32'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => 'Selected routes');
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: any(named: 'hospitalSubnets'),
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => <String>[]);
+    _stubSuccessfulRdp(
+      mockNetworkDiagnostics,
+      mockRdpLauncher,
+      host: '10.9.9.9',
+    );
+
+    final states = await workflowService
+        .connect(
+          host: 'localhost',
+          user: '',
+          domain: '',
+          selectedWifi: '',
+          gateway: '192.168.1.1',
+          iface: 'Wi-Fi',
+          resolvedPort: 3389,
+          onSelectServer: () async => (host: '10.9.9.9', port: 3389),
+        )
+        .toList();
+
+    verify(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['10.9.9.9/32'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).called(1);
     expect(states.last.step, ConnectionStep.done);
   });
 
@@ -1172,7 +1364,7 @@ void main() {
         )).called(1);
   });
 
-  test('missing routes after enabling the tunnel abort the flow', () async {
+  test('missing routes on desktop fall back to direct RDP', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
@@ -1188,6 +1380,7 @@ void main() {
         )).thenAnswer((_) async => ['10.0.0.0/8']);
     when(() => mockRouteManager.disableSplitTunnel())
         .thenAnswer((_) async => 'Revertido');
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
 
     final states = await workflowService.connect(
       subnets: ['10.0.0.0/8'],
@@ -1200,8 +1393,11 @@ void main() {
       resolvedPort: 3389,
     ).toList();
 
-    expect(states.last.step, ConnectionStep.error);
-    expect(states.last.logMessage, contains('10.0.0.0/8'));
+    expect(states.last.step, ConnectionStep.done);
+    expect(
+      states.map((state) => state.logMessage),
+      contains(contains('10.0.0.0/8')),
+    );
     verify(() => mockRouteManager.disableSplitTunnel()).called(1);
   });
 

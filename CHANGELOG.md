@@ -49,9 +49,11 @@ Todas las versiones relevantes de MedLink Connect.
 
 - Bridge nativo stub `medlink_rdp_bridge` (`jni_bridge.cpp`,
   `engine_bridge.c`, `RdpBridge.kt`) ya no se empaqueta en el APK Android: nada
-  lo invocaba y su stub simulaba conexiones RDP. El PoC aislado
-  (`lib/mobile_rdp`, `native/bridge`, submodule `native/freerdp`) queda
-  intacto y fuera de los instaladores.
+  lo invocaba y su stub simulaba conexiones RDP.
+- PoC aislado de RDP móvil eliminado del repositorio: `lib/mobile_rdp/`,
+  `native/bridge/` e `ios/Runner/RDP/` no estaban referenciados por la app, el
+  build ni el proyecto Xcode. El submódulo `native/freerdp` se conserva como
+  referencia y sigue fuera de los instaladores.
 - `ndkVersion` y TODO de plantilla retirados de `android/app/build.gradle.kts`
   al desaparecer el único build nativo de la app.
 

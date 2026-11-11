@@ -48,7 +48,7 @@ En Windows la app genera perfiles Wi-Fi WPA2-PSK. En Linux usa NetworkManager (`
   se persiste en la configuración de MedLink Connect.
 - El diagnóstico usa como objetivo el host RDP configurado o, si no existe, el
   gateway de la red hospitalaria. No depende de `8.8.8.8` ni de Internet.
-- `lib/mobile_rdp/` y `native/freerdp/` son un PoC aislado que no se importa en
+- El submódulo `native/freerdp/` se conserva como referencia; no se importa en
   la aplicación y no forma parte de los instaladores de escritorio.
 - macOS requiere un helper privilegiado para rutas; iOS requiere
   NetworkExtension. Sin ellos, el split tunnel no está soportado en esas

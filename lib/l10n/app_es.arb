@@ -88,8 +88,6 @@
   "detectCurrentNetwork": "Detectar red actual",
   "gatewayHint": "ej: 192.168.1.1",
   "interfaceHint": "ej: Wi-Fi, Ethernet",
-  "hospitalSubnetsOnePerLine": "Subredes del hospital (una por línea)",
-  "hospitalSubnetsHint": "10.0.0.0/8",
   "otherNetwork": "Otra red…",
   "wifiNetworkLabel": "Red Wi-Fi",
   "wifiNetworkName": "Nombre de la red Wi-Fi",
@@ -597,7 +595,6 @@
       }
     }
   },
-  "logInvalidNoSubnets": "Configuración inválida: agrega al menos una subred del hospital.",
   "logInvalidNoHost": "Configuración inválida: host RDP es obligatorio.",
   "logDetectingGateway": "Detectando gateway/interfaz...",
   "logMissingGatewayInterfaceHint": "Faltan gateway o interfaz. Usa \"Detectar red actual\" o completa los campos en Opciones avanzadas.",
@@ -684,7 +681,18 @@
   "logWorkflowWifiUnavailable": "El control automático de Wi-Fi no está disponible en esta plataforma; se usará la red actual.",
   "logWorkflowNoAutoNetwork": "No se detectaron gateway/interfaz automáticamente. Se usarán los valores configurados.",
   "logWorkflowStepPrepare": "Paso 1/4 — Preparando la conexión\nSe omiten resets agresivos de red para evitar demoras y cortes innecesarios.",
-  "logWorkflowNoSubnets": "No hay subredes configuradas; se omite el túnel dividido.",
+  "logWorkflowNoSubnets": "No se pudieron determinar rutas para el servidor; se omite el túnel dividido.",
+  "logWorkflowAutoRoutes": "Sin subredes configuradas: se usarán rutas /32 hacia {host} ({routes}).",
+  "@logWorkflowAutoRoutes": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "routes": {
+        "type": "String"
+      }
+    }
+  },
   "logWorkflowStepTunnel": "Paso 2/4 — Habilitando túnel dividido para {count} subred(es)",
   "@logWorkflowStepTunnel": {
     "placeholders": {

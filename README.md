@@ -4,22 +4,22 @@ Aplicación de escritorio en Flutter para **Windows** (validado) que guía la co
 
 ## Arquitectura (clave)
 
-MedLink Connect **NO** implementa un túnel VPN completo (WireGuard/OpenVPN). Utiliza **rutas estáticas por subred (policy-based routing)**:
+MedLink Connect **NO** implementa un túnel VPN completo (WireGuard/OpenVPN). Utiliza **rutas estáticas (policy-based routing)**:
 
 1. Conexión a la red Wi-Fi hospitalaria
 2. Obtención de gateway e interfaz activa
-3. Añadir rutas estáticas (`route add` / `New-NetRoute`) para las subredes hospitalarias configuradas
+3. Resolución del servidor RDP (preset o IP) y alta automática de rutas `/32` (`route add` / `New-NetRoute`) vía el gateway hospitalario, sin pedir subredes al usuario
 4. Verificación de rutas instaladas
 5. Comprobación de alcance TCP:3389 al servidor RDP
 6. Generación de `.rdp` optimizado y lanzamiento con `mstsc.exe`
 7. **Rollback automático** si falla tras habilitar rutas
 
-**Flujo end-to-end:** `Wi-Fi → Gateway/Interfaz → Rutas estáticas → TCP:3389 → Lanzamiento mstsc`
+**Flujo end-to-end:** `Wi-Fi → Gateway/Interfaz → Rutas /32 → TCP:3389 → Lanzamiento mstsc`
 
 ## Características
 
 - **Wi-Fi**: Escaneo, conexión a redes abiertas o con clave, espera a conexión real con gateway/interfaz
-- **Split-tunnel por rutas**: Solo el tráfico a subredes hospitalarias va por la interfaz hospitalaria
+- **Split-tunnel por rutas**: Solo el tráfico al servidor RDP va por la interfaz hospitalaria (rutas `/32` automáticas)
 - **Detección robusta**: Gateway/interfaz vía `GetAdaptersAddresses`, PowerShell `Get-NetRoute`, `route print` o `GetIpForwardTable2`
 - **RDP optimizado**: Perfiles `Adaptativo`, `Máxima estabilidad`, `Máxima velocidad` con generación dinámica `.rdp`
 - **Diagnósticos**: Ping, TCP:3389, verificación de rutas, solucionador automático

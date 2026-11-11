@@ -530,7 +530,7 @@ void main() {
     expect(states.last.step, ConnectionStep.done);
   });
 
-  test('server selection runs after the split tunnel and updates the target',
+  test('server selection runs before the split tunnel and updates the target',
       () async {
     final order = <String>[];
     when(() => mockRouteManager.enableSplitTunnel(
@@ -579,7 +579,7 @@ void main() {
       },
     ).toList();
 
-    expect(order, ['enable', 'select', 'ping']);
+    expect(order, ['select', 'enable', 'ping']);
     verifyNever(() => mockNetworkDiagnostics.ping('192.168.1.100'));
     verify(() => mockRdpLauncher.launchRdp(
           host: '10.1.2.3',
@@ -589,6 +589,48 @@ void main() {
           profile: 'adaptive',
           measuredLatencyMs: 20,
         )).called(1);
+    expect(states.last.step, ConnectionStep.done);
+  });
+
+  test('derives /32 routes from the RDP host when subnets are empty', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    workflowService.hostCidrResolver =
+        (host) async => host == '192.168.1.100' ? ['192.168.1.100/32'] : [];
+
+    when(() => mockRouteManager.verifyRoutes(
+          hospitalSubnets: ['192.168.1.100/32'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => <String>[]);
+    when(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['192.168.1.100/32'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).thenAnswer((_) async => 'Routes added');
+    _stubSuccessfulRdp(mockNetworkDiagnostics, mockRdpLauncher);
+
+    final states = await workflowService
+        .connect(
+          host: '192.168.1.100',
+          user: '',
+          domain: '',
+          selectedWifi: '',
+          gateway: '192.168.1.1',
+          iface: 'Wi-Fi',
+          resolvedPort: 3389,
+        )
+        .toList();
+
+    verify(() => mockRouteManager.enableSplitTunnel(
+          hospitalSubnets: ['192.168.1.100/32'],
+          gateway: '192.168.1.1',
+          interfaceName: 'Wi-Fi',
+        )).called(1);
+    expect(
+      states.map((state) => state.logMessage),
+      contains(contains('rutas /32')),
+    );
     expect(states.last.step, ConnectionStep.done);
   });
 
@@ -929,7 +971,8 @@ void main() {
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
 
     var infoCalls = 0;
-    when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer((_) async {
+    when(() => mockWifiManager.getCurrentConnectionInfo())
+        .thenAnswer((_) async {
       infoCalls++;
       if (infoCalls == 1) {
         return const WifiConnectionInfo(

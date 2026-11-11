@@ -44,8 +44,7 @@ void main() {
     when(() => mockSettingsStorage.init()).thenAnswer((_) async {});
     when(() => mockSettingsStorage.save()).thenAnswer((_) async {});
     when(() => mockSettingsStorage.clear()).thenAnswer((_) async {});
-    when(() => mockSettingsStorage.pendingSplitTunnelCleanup)
-        .thenReturn(null);
+    when(() => mockSettingsStorage.pendingSplitTunnelCleanup).thenReturn(null);
     when(() => mockSettingsStorage.setPendingSplitTunnelCleanup(
           subnets: any(named: 'subnets'),
           gateway: any(named: 'gateway'),
@@ -53,7 +52,6 @@ void main() {
         )).thenAnswer((_) async {});
     when(() => mockSettingsStorage.clearPendingSplitTunnelCleanup())
         .thenAnswer((_) async {});
-    when(() => mockSettingsStorage.hospitalSubnetsAsText).thenReturn('');
     when(() => mockSettingsStorage.gateway).thenReturn('');
     when(() => mockSettingsStorage.interfaceName).thenReturn('');
     when(() => mockSettingsStorage.rdpHost).thenReturn('');
@@ -125,7 +123,6 @@ void main() {
     WidgetTester tester,
     HomeController controller,
   ) async {
-    controller.subnetsCtrl.text = '10.0.0.0/8';
     controller.rdpHostCtrl.text = '10.0.0.50';
     controller.gatewayCtrl.text = '192.168.1.1';
     controller.ifaceCtrl.text = 'wlan0';
@@ -182,7 +179,8 @@ void main() {
     await getIt.reset();
   });
 
-  testWidgets('renders the shell and the current Wi-Fi network', (tester) async {
+  testWidgets('renders the shell and the current Wi-Fi network',
+      (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     try {
       await pumpHome(tester);

@@ -31,7 +31,7 @@ void _stubWorkflowConnect(
   Future<void> Function(Invocation invocation) beforeYield,
 ) {
   when(() => service.connect(
-        subnets: ['10.0.0.0/8'],
+        subnets: const [],
         host: '192.168.1.100',
         user: '',
         domain: '',
@@ -72,7 +72,6 @@ void main() {
     when(() => mockSettingsStorage.init()).thenAnswer((_) async {});
     when(() => mockSettingsStorage.save()).thenAnswer((_) async {});
 
-    when(() => mockSettingsStorage.hospitalSubnetsAsText).thenReturn('');
     when(() => mockSettingsStorage.gateway).thenReturn('');
     when(() => mockSettingsStorage.interfaceName).thenReturn('');
     when(() => mockSettingsStorage.rdpHost).thenReturn('');
@@ -255,13 +254,12 @@ void main() {
         ),
       ];
       controller.preferMostStableServer = true;
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'Wi-Fi';
       controller.rdpPortCtrl.text = '3389';
 
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '',
             user: '',
             domain: '',
@@ -288,7 +286,7 @@ void main() {
         isFalse,
       );
       verify(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '',
             user: '',
             domain: '',
@@ -370,7 +368,6 @@ void main() {
     test('troubleshooter does not verify routes on Apple platforms', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.rdpHostCtrl.text = '10.0.0.50';
       controller.preferMostStableServer = false;
       when(() => mockRouteManager.getPrimaryDefaultRouteInfo())
@@ -395,7 +392,6 @@ void main() {
     test('fallback clears split tunnel state so a second connect is allowed',
         () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'Wi-Fi';
       controller.rdpPortCtrl.text = '3389';
@@ -403,7 +399,7 @@ void main() {
       when(() => mockSettingsStorage.clearPendingSplitTunnelCleanup())
           .thenAnswer((_) async {});
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -452,7 +448,6 @@ void main() {
     test('split tunnel becomes active only after native enable callback',
         () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'Wi-Fi';
       controller.rdpPortCtrl.text = '3389';
@@ -463,7 +458,7 @@ void main() {
             interfaceName: any(named: 'interfaceName'),
           )).thenAnswer((_) async {});
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -571,7 +566,6 @@ void main() {
     test('connect attempts selected Wi-Fi before requiring gateway/interface',
         () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.rdpPortCtrl.text = '3389';
       controller.manualWifiCtrl.text = 'NuevaRed';
       controller.selectManualWifi();
@@ -588,7 +582,7 @@ void main() {
       when(() => mockRouteManager.getPrimaryDefaultRouteInfo())
           .thenAnswer((_) async => <String, String>{});
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -611,7 +605,7 @@ void main() {
       await controller.connect();
 
       verify(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -636,7 +630,6 @@ void main() {
 
     test('troubleshooter refreshes gateway and interface after Wi-Fi sync',
         () async {
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.rdpHostCtrl.text = '10.0.0.50';
       controller.preferMostStableServer = false;
       when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
@@ -646,8 +639,10 @@ void main() {
           gateway: '192.168.1.1',
         ),
       );
+      when(() => mockWorkflowService.hostCidrResolver)
+          .thenReturn((host) async => ['10.0.0.50/32']);
       when(() => mockRouteManager.verifyRoutes(
-            hospitalSubnets: ['10.0.0.0/8'],
+            hospitalSubnets: ['10.0.0.50/32'],
             gateway: '192.168.1.1',
             interfaceName: 'eth0',
           )).thenAnswer((_) async => const <String>[]);
@@ -661,7 +656,7 @@ void main() {
       await controller.runConnectionTroubleshooter();
 
       verify(() => mockRouteManager.verifyRoutes(
-            hospitalSubnets: ['10.0.0.0/8'],
+            hospitalSubnets: ['10.0.0.50/32'],
             gateway: '192.168.1.1',
             interfaceName: 'eth0',
           )).called(1);
@@ -669,7 +664,6 @@ void main() {
 
     test('a failed rollback keeps the split tunnel marked as active', () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'Wi-Fi';
 
@@ -679,7 +673,7 @@ void main() {
             interfaceName: any(named: 'interfaceName'),
           )).thenAnswer((_) async {});
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -775,14 +769,8 @@ void main() {
       );
     });
 
-    test('connect rejects empty subnets or host', () async {
+    test('connect rejects an empty host', () async {
       controller.rdpHostCtrl.text = '';
-      await controller.connect();
-      expect(controller.logs.any((l) => l.contains('Configuración inválida')),
-          isTrue);
-
-      controller.rdpHostCtrl.text = '192.168.1.1';
-      controller.subnetsCtrl.text = '';
       await controller.connect();
       expect(controller.logs.any((l) => l.contains('Configuración inválida')),
           isTrue);
@@ -807,8 +795,8 @@ void main() {
         controller.logs.any((l) => l.contains('Almacenamiento no disponible')),
         isFalse,
       );
-      expect(bareController.logs.any((l) => l.contains('no disponible')),
-          isTrue);
+      expect(
+          bareController.logs.any((l) => l.contains('no disponible')), isTrue);
       expect(bareController.serverPresets, isEmpty);
     });
 
@@ -987,10 +975,10 @@ void main() {
           port: 3389,
         ),
       ];
-      when(() => mockNetworkDiagnostics.checkTcpPortDetailed(
-              'serv_pediatrico.huv.gov.co', 3389))
-          .thenAnswer(
-              (_) async => const NetworkProbeResult(error: 'timeout: sin ruta'));
+      when(() =>
+          mockNetworkDiagnostics.checkTcpPortDetailed(
+              'serv_pediatrico.huv.gov.co', 3389)).thenAnswer(
+          (_) async => const NetworkProbeResult(error: 'timeout: sin ruta'));
 
       final best = await controller.diagnoseBestServerPreset();
 
@@ -1034,8 +1022,8 @@ void main() {
 
       await controller.warnIfDefaultRouteUsesHospitalInterface('wlan0');
 
-      expect(controller.logs.any((l) => l.contains('ruta por defecto')),
-          isTrue);
+      expect(
+          controller.logs.any((l) => l.contains('ruta por defecto')), isTrue);
     });
 
     test('warnIfDefaultRouteUsesHospitalInterface stays silent otherwise',
@@ -1068,15 +1056,15 @@ void main() {
       expect(result.latency, 45);
       expect(result.error, isNull);
       expect(controller.logs.any((l) => l.contains('Reintentando')), isTrue);
-      expect(controller.logs.any((l) => l.contains('respondió en el reintento')),
+      expect(
+          controller.logs.any((l) => l.contains('respondió en el reintento')),
           isTrue);
     });
 
     test('measureTcpPortWithRetryDetailed keeps the last probe error',
         () async {
       when(() => mockNetworkDiagnostics.checkTcpPortDetailed('10.0.0.5', 3389))
-          .thenAnswer(
-              (_) async => const NetworkProbeResult(error: 'sin ruta'));
+          .thenAnswer((_) async => const NetworkProbeResult(error: 'sin ruta'));
 
       final result =
           await controller.measureTcpPortWithRetryDetailed('10.0.0.5', 3389);
@@ -1140,8 +1128,7 @@ void main() {
       expect(controller.logs.any((l) => l.contains('192.168.1.1')), isTrue);
     });
 
-    test('runDiagnostics rejects an invalid gateway before probing',
-        () async {
+    test('runDiagnostics rejects an invalid gateway before probing', () async {
       controller.rdpHostCtrl.text = '';
       controller.gatewayCtrl.text = '999.999.1.1';
       when(() => mockNetworkDiagnostics.flushDns())
@@ -1158,9 +1145,7 @@ void main() {
       );
     });
 
-    test('connect without a host shows the missing-server guidance',
-        () async {
-      controller.subnetsCtrl.text = '10.0.0.0/8';
+    test('connect without a host shows the missing-server guidance', () async {
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'wlan0';
       controller.preferMostStableServer = false;
@@ -1190,7 +1175,6 @@ void main() {
     test('connect detects the default route when no Wi-Fi is selected',
         () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.clear();
       controller.ifaceCtrl.clear();
       controller.rdpPortCtrl.text = '3389';
@@ -1199,7 +1183,7 @@ void main() {
         (_) async => {'gateway': '192.168.5.1', 'interfaceName': 'wlan0'},
       );
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -1229,7 +1213,6 @@ void main() {
     test('connect without gateway or interface shows network-data guidance',
         () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.clear();
       controller.ifaceCtrl.clear();
       when(() => mockRouteManager.getPrimaryDefaultRouteInfo())
@@ -1262,7 +1245,6 @@ void main() {
 
     test('connect closes a previous tunnel before reconnecting', () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'wlan0';
       controller.rdpPortCtrl.text = '3389';
@@ -1283,6 +1265,7 @@ void main() {
           );
         }();
       }
+
       _stubWorkflowConnect(
           mockWorkflowService, firstStream, (invocation) async {});
 
@@ -1319,10 +1302,8 @@ void main() {
       expect(controller.splitTunnelActive, isFalse);
     });
 
-    test('connect aborts when the previous tunnel cannot be closed',
-        () async {
+    test('connect aborts when the previous tunnel cannot be closed', () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'wlan0';
 
@@ -1358,7 +1339,7 @@ void main() {
       // Solo la primera conexión llegó al workflow; la segunda aborta al
       // cerrar el túnel previo.
       verify(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -1377,16 +1358,14 @@ void main() {
       expect(controller.guidanceTitle, 'Problema con rutas/gateway');
     });
 
-    test('connect resets the step when the workflow closes early',
-        () async {
+    test('connect resets the step when the workflow closes early', () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'wlan0';
       controller.rdpPortCtrl.text = '3389';
 
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -1422,7 +1401,6 @@ void main() {
         ),
       ];
       controller.preferMostStableServer = true;
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'wlan0';
       controller.rdpPortCtrl.text = '3389';
@@ -1430,7 +1408,7 @@ void main() {
       when(() => mockNetworkDiagnostics.checkTcpPortDetailed('10.0.0.2', 3389))
           .thenAnswer((_) async => const NetworkProbeResult(value: 30));
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '',
             user: '',
             domain: '',
@@ -1472,7 +1450,6 @@ void main() {
     test('connect clears the pending cleanup when the tunnel rolls back',
         () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'wlan0';
 
@@ -1485,7 +1462,7 @@ void main() {
           .thenAnswer((_) async {});
 
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -1560,13 +1537,13 @@ void main() {
       await controller.disconnect();
 
       expect(controller.guidanceIsError, isTrue);
-      expect(controller.logs.any((l) => l.contains('ip no encontrado')), isTrue);
+      expect(
+          controller.logs.any((l) => l.contains('ip no encontrado')), isTrue);
     });
 
     test('resetSettings disables an active tunnel and clears the form',
         () async {
       controller.rdpHostCtrl.text = '192.168.1.100';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'wlan0';
 
@@ -1592,7 +1569,7 @@ void main() {
 
       // Deja el túnel activo mediante una conexión previa.
       when(() => mockWorkflowService.connect(
-            subnets: ['10.0.0.0/8'],
+            subnets: const [],
             host: '192.168.1.100',
             user: '',
             domain: '',
@@ -1706,40 +1683,7 @@ void main() {
       expect(findingsText.contains('Interfaz de red'), isTrue);
     });
 
-    test('troubleshooter reports invalid subnets as a finding', () async {
-      controller.rdpHostCtrl.text = '10.0.0.50';
-      controller.subnetsCtrl.text = '10.0.0.0/33';
-      controller.gatewayCtrl.text = '192.168.1.1';
-      controller.ifaceCtrl.text = 'wlan0';
-      controller.preferMostStableServer = false;
-      when(() => mockWifiManager.getCurrentConnectionInfo()).thenAnswer(
-        (_) async => const WifiConnectionInfo(
-          ssid: 'HUV_WIFI',
-          interfaceName: 'wlan0',
-          gateway: '192.168.1.1',
-        ),
-      );
-      when(() => mockRdpLauncher.isRdpClientAvailable())
-          .thenAnswer((_) async => true);
-      when(() => mockNetworkDiagnostics.ping('10.0.0.50'))
-          .thenAnswer((_) async => 5);
-      when(() => mockNetworkDiagnostics.checkTcpPortDetailed('10.0.0.50', 3389))
-          .thenAnswer((_) async => const NetworkProbeResult(value: 10));
-
-      await controller.runConnectionTroubleshooter();
-
-      expect(
-        controller.logs.any((l) => l.contains('Subredes del hospital')),
-        isTrue,
-      );
-      expect(
-        controller.guidanceBullets.any((b) => b.contains('Subredes')),
-        isTrue,
-      );
-    });
-
-    test('troubleshooter reports a missing RDP client as a finding',
-        () async {
+    test('troubleshooter reports a missing RDP client as a finding', () async {
       controller.rdpHostCtrl.text = '10.0.0.50';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'wlan0';
@@ -1770,7 +1714,6 @@ void main() {
     test('troubleshooter reports missing hospital routes as a finding',
         () async {
       controller.rdpHostCtrl.text = '10.0.0.50';
-      controller.subnetsCtrl.text = '10.0.0.0/8';
       controller.gatewayCtrl.text = '192.168.1.1';
       controller.ifaceCtrl.text = 'wlan0';
       controller.preferMostStableServer = false;
@@ -1783,11 +1726,13 @@ void main() {
       );
       when(() => mockRdpLauncher.isRdpClientAvailable())
           .thenAnswer((_) async => true);
+      when(() => mockWorkflowService.hostCidrResolver)
+          .thenReturn((host) async => ['10.0.0.50/32']);
       when(() => mockRouteManager.verifyRoutes(
-            hospitalSubnets: ['10.0.0.0/8'],
+            hospitalSubnets: ['10.0.0.50/32'],
             gateway: '192.168.1.1',
             interfaceName: 'wlan0',
-          )).thenAnswer((_) async => ['10.0.0.0/8']);
+          )).thenAnswer((_) async => ['10.0.0.50/32']);
       when(() => mockNetworkDiagnostics.ping('10.0.0.50'))
           .thenAnswer((_) async => 5);
       when(() => mockNetworkDiagnostics.checkTcpPortDetailed('10.0.0.50', 3389))
@@ -2037,8 +1982,7 @@ void main() {
       });
     });
 
-    test(
-        'connectWifiOnly shows failure guidance when the Wi-Fi never confirms',
+    test('connectWifiOnly shows failure guidance when the Wi-Fi never confirms',
         () {
       fakeAsync((async) {
         controller.manualWifiCtrl.text = 'HUV_WIFI';

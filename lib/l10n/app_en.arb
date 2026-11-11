@@ -74,8 +74,6 @@
   "detectCurrentNetwork": "Detect current network",
   "gatewayHint": "e.g. 192.168.1.1",
   "interfaceHint": "e.g. Wi-Fi, Ethernet",
-  "hospitalSubnetsOnePerLine": "Hospital subnets (one per line)",
-  "hospitalSubnetsHint": "10.0.0.0/8",
   "otherNetwork": "Other network…",
   "wifiNetworkLabel": "Wi-Fi network",
   "wifiNetworkName": "Wi-Fi network name",
@@ -212,7 +210,6 @@
   "findingRdpDidNotRespond": "The RDP server did not respond on port {port}.",
   "logTroubleshooterDone": "Troubleshooter completed.",
   "logTroubleshooterFailed": "Troubleshooter failed: {error}",
-  "logInvalidNoSubnets": "Invalid configuration: add at least one hospital subnet.",
   "logInvalidNoHost": "Invalid configuration: RDP host is required.",
   "logDetectingGateway": "Detecting gateway/interface...",
   "logMissingGatewayInterfaceHint": "Gateway or interface is missing. Use \"Detect current network\" or fill in the fields under Advanced Options.",
@@ -271,7 +268,18 @@
   "logWorkflowWifiUnavailable": "Automatic Wi-Fi control is unavailable on this platform; the current network will be used.",
   "logWorkflowNoAutoNetwork": "No gateway/interface was detected automatically. Configured values will be used.",
   "logWorkflowStepPrepare": "Step 1/4 — Preparing the connection\nAggressive network resets are skipped to avoid unnecessary delays and outages.",
-  "logWorkflowNoSubnets": "No subnets are configured; split tunnel will be skipped.",
+  "logWorkflowNoSubnets": "Could not determine routes for the server; split tunnel will be skipped.",
+  "logWorkflowAutoRoutes": "No subnets configured: using /32 routes to {host} ({routes}).",
+  "@logWorkflowAutoRoutes": {
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "routes": {
+        "type": "String"
+      }
+    }
+  },
   "logWorkflowStepTunnel": "Step 2/4 — Enabling split tunnel for {count} subnet(s)",
   "@logWorkflowStepTunnel": {
     "placeholders": {

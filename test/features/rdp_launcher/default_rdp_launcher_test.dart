@@ -199,8 +199,7 @@ void main() {
       );
     });
 
-    test('uses a fallback message when the platform error is empty',
-        () async {
+    test('uses a fallback message when the platform error is empty', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
         channel,

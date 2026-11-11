@@ -31,6 +31,22 @@ class WorkflowState {
 
 typedef SelectedRdpTarget = ({String host, int port});
 
+typedef HostCidrResolver = Future<List<String>> Function(String host);
+
+/// Resolves [host] to IPv4 /32 CIDRs so the split tunnel can route the RDP
+/// server through the hospital gateway without asking the user for subnets.
+Future<List<String>> resolveHostCidrs(String host) async {
+  final addresses =
+      await InternetAddress.lookup(host).timeout(const Duration(seconds: 4));
+  final seen = <String>{};
+  for (final address in addresses) {
+    if (address.type == InternetAddressType.IPv4) {
+      seen.add('${address.address}/32');
+    }
+  }
+  return seen.toList(growable: false);
+}
+
 @lazySingleton
 class ConnectionWorkflowService {
   final RouteManager routeManager;
@@ -41,6 +57,9 @@ class ConnectionWorkflowService {
   ConnectionWorkflowService(
       this.routeManager, this.networkDiagnostics, this.rdpLauncher,
       {this.wifiManager});
+
+  /// Overridable in tests to avoid real DNS lookups.
+  HostCidrResolver hostCidrResolver = resolveHostCidrs;
 
   AppLocalizations? _l10n;
 
@@ -68,8 +87,16 @@ class ConnectionWorkflowService {
   bool _sameInterfaceName(String a, String b) =>
       a.trim().toLowerCase() == b.trim().toLowerCase();
 
+  Future<List<String>> _resolveHostSubnets(String host) async {
+    try {
+      return await hostCidrResolver(host);
+    } catch (_) {
+      return const [];
+    }
+  }
+
   Stream<WorkflowState> connect({
-    required List<String> subnets,
+    List<String> subnets = const [],
     required String host,
     required String user,
     required String domain,
@@ -104,7 +131,7 @@ class ConnectionWorkflowService {
       final sanitizedSubnets = InputSanitizer.sanitizeSubnets(
         subnets,
         fieldName: _t.hospitalSubnets,
-        allowEmpty: !_requiresNetworkConfig,
+        allowEmpty: true,
       );
       final sanitizedGateway = gateway.trim().isEmpty
           ? ''
@@ -241,6 +268,22 @@ class ConnectionWorkflowService {
         currentIface = sanitizedIface;
       }
 
+      if (onSelectServer != null) {
+        try {
+          final selected = await onSelectServer();
+          if (selected != null) {
+            effectiveHost = selected.host;
+            effectivePort = selected.port;
+          }
+        } catch (e) {
+          yield WorkflowState(
+            step: ConnectionStep.preLaunch,
+            logMessage: _t.logSelectBestServerError('$e'),
+            isError: true,
+          );
+        }
+      }
+
       yield WorkflowState(
         step: ConnectionStep.splitTunnel,
         logMessage: _t.logWorkflowStepPrepare,
@@ -251,7 +294,32 @@ class ConnectionWorkflowService {
         throw RouteConfigurationException(_t.logMissingGatewayInterfaceHint);
       }
 
-      if (sanitizedSubnets.isEmpty) {
+      var effectiveSubnets = sanitizedSubnets;
+      if (effectiveSubnets.isEmpty &&
+          _requiresNetworkConfig &&
+          effectiveHost.trim().isNotEmpty) {
+        final autoSubnets = await _resolveHostSubnets(effectiveHost.trim());
+        if (autoSubnets.isNotEmpty) {
+          try {
+            effectiveSubnets = InputSanitizer.sanitizeSubnets(
+              autoSubnets,
+              fieldName: _t.hospitalSubnets,
+              allowEmpty: true,
+            );
+            yield WorkflowState(
+              step: ConnectionStep.splitTunnel,
+              logMessage: _t.logWorkflowAutoRoutes(
+                effectiveHost.trim(),
+                effectiveSubnets.join(', '),
+              ),
+            );
+          } on ArgumentError {
+            effectiveSubnets = const [];
+          }
+        }
+      }
+
+      if (effectiveSubnets.isEmpty) {
         yield WorkflowState(
           step: ConnectionStep.splitTunnel,
           logMessage: _t.logWorkflowNoSubnets,
@@ -259,7 +327,7 @@ class ConnectionWorkflowService {
       } else {
         final trackedSubnets = <String>[];
         if (onSplitTunnelEnabled != null) {
-          for (final subnet in sanitizedSubnets) {
+          for (final subnet in effectiveSubnets) {
             try {
               final missingRoutes = await routeManager.verifyRoutes(
                 hospitalSubnets: [subnet],
@@ -277,13 +345,13 @@ class ConnectionWorkflowService {
 
         yield WorkflowState(
           step: ConnectionStep.splitTunnel,
-          logMessage: _t.logWorkflowStepTunnel(sanitizedSubnets.length),
+          logMessage: _t.logWorkflowStepTunnel(effectiveSubnets.length),
         );
 
         try {
           splitTunnelSetupAttempted = true;
           final splitMsg = await routeManager.enableSplitTunnel(
-            hospitalSubnets: sanitizedSubnets,
+            hospitalSubnets: effectiveSubnets,
             gateway: currentGateway,
             interfaceName: currentIface,
           );
@@ -306,7 +374,7 @@ class ConnectionWorkflowService {
 
           await Future<void>.delayed(const Duration(milliseconds: 600));
           final missingRoutes = await routeManager.verifyRoutes(
-            hospitalSubnets: sanitizedSubnets,
+            hospitalSubnets: effectiveSubnets,
             gateway: currentGateway,
             interfaceName: currentIface,
           );
@@ -365,22 +433,6 @@ class ConnectionWorkflowService {
           yield WorkflowState(
             step: ConnectionStep.preLaunch,
             logMessage: _t.logWorkflowTunnelUnavailable('$e'),
-            isError: true,
-          );
-        }
-      }
-
-      if (onSelectServer != null) {
-        try {
-          final selected = await onSelectServer();
-          if (selected != null) {
-            effectiveHost = selected.host;
-            effectivePort = selected.port;
-          }
-        } catch (e) {
-          yield WorkflowState(
-            step: ConnectionStep.preLaunch,
-            logMessage: _t.logSelectBestServerError('$e'),
             isError: true,
           );
         }

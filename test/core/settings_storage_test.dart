@@ -112,10 +112,6 @@ void main() {
     settings.interfaceName = 'wlan0';
     expect(settings.interfaceName, 'wlan0');
 
-    expect(settings.hospitalSubnetsAsText, '');
-    settings.hospitalSubnetsAsText = '10.0.0.0/8\n192.168.0.0/16';
-    expect(settings.hospitalSubnetsAsText, contains('192.168.0.0/16'));
-
     expect(settings.rdpHost, '');
     settings.rdpHost = '10.0.0.50';
     expect(settings.rdpHost, '10.0.0.50');
@@ -137,8 +133,7 @@ void main() {
     expect(settings.selectedServerPresetId, 'pediatria');
   });
 
-  test('secure storage failures fall back to empty protected fields',
-      () async {
+  test('secure storage failures fall back to empty protected fields', () async {
     FlutterSecureStoragePlatform.instance = _FailingSecureStorage();
     addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
 

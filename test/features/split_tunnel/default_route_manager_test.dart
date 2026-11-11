@@ -241,7 +241,8 @@ void main() {
       ),
       throwsA(
         predicate(
-          (error) => error is MedLinkException &&
+          (error) =>
+              error is MedLinkException &&
               error.type == MedLinkErrorType.permission,
         ),
       ),
@@ -251,15 +252,15 @@ void main() {
       routeManager.disableSplitTunnel(),
       throwsA(
         predicate(
-          (error) => error is MedLinkException &&
+          (error) =>
+              error is MedLinkException &&
               error.type == MedLinkErrorType.permission,
         ),
       ),
     );
   });
 
-  test('removeRoute falls back to a default message on null results',
-      () async {
+  test('removeRoute falls back to a default message on null results', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('com.medlinkconnect/route_manager'),
@@ -274,8 +275,7 @@ void main() {
     expect(res, equals('Route removed.'));
   });
 
-  test('disableSplitTunnel falls back to a default message on null',
-      () async {
+  test('disableSplitTunnel falls back to a default message on null', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('com.medlinkconnect/route_manager'),
@@ -306,10 +306,10 @@ void main() {
         .setMockMethodCallHandler(
       const MethodChannel('com.medlinkconnect/route_manager'),
       (MethodCall methodCall) async => <dynamic, dynamic>{
-            'interfaceName': 'wlan0',
-            'gateway': '192.168.5.1',
-            'extra': null,
-          },
+        'interfaceName': 'wlan0',
+        'gateway': '192.168.5.1',
+        'extra': null,
+      },
     );
 
     final info = await routeManager.getPrimaryDefaultRouteInfo();
@@ -327,8 +327,7 @@ void main() {
     expect(empty, isEmpty);
   });
 
-  test('listInterfaces returns the native list or an empty fallback',
-      () async {
+  test('listInterfaces returns the native list or an empty fallback', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('com.medlinkconnect/route_manager'),
@@ -430,8 +429,7 @@ void main() {
     expect(missing, equals(['10.0.0.0/8', '172.16.0.0/12']));
   });
 
-  test('verifyRoutes keeps the first report when the retry is null',
-      () async {
+  test('verifyRoutes keeps the first report when the retry is null', () async {
     var calls = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(

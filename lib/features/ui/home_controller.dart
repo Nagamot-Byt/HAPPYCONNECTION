@@ -123,7 +123,6 @@ class HomeController extends ChangeNotifier {
   bool _guidanceIsError = false;
   bool get guidanceIsError => _guidanceIsError;
 
-  final TextEditingController subnetsCtrl = TextEditingController();
   final TextEditingController gatewayCtrl = TextEditingController();
   final TextEditingController ifaceCtrl = TextEditingController();
   final TextEditingController rdpHostCtrl = TextEditingController();
@@ -302,7 +301,6 @@ class HomeController extends ChangeNotifier {
     }
     await s.init();
 
-    subnetsCtrl.text = s.hospitalSubnetsAsText;
     gatewayCtrl.text = s.gateway;
     ifaceCtrl.text = s.interfaceName;
     rdpHostCtrl.text = s.rdpHost;
@@ -323,7 +321,6 @@ class HomeController extends ChangeNotifier {
     final s = settings;
     if (s == null) return;
 
-    s.hospitalSubnetsAsText = subnetsCtrl.text;
     s.gateway = gatewayCtrl.text;
     s.interfaceName = ifaceCtrl.text;
     s.rdpHost = rdpHostCtrl.text;
@@ -515,14 +512,6 @@ class HomeController extends ChangeNotifier {
     return false;
   }
 
-  List<String> parseSubnets() {
-    return subnetsCtrl.text
-        .split('\n')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList(growable: false);
-  }
-
   Future<void> warnIfDefaultRouteUsesHospitalInterface(
     String hospitalInterface,
   ) async {
@@ -688,7 +677,6 @@ class HomeController extends ChangeNotifier {
     if (_busy) return;
     var gateway = gatewayCtrl.text.trim();
     var iface = ifaceCtrl.text.trim();
-    var subnets = parseSubnets();
     final findings = <String>[];
 
     clearGuidance();
@@ -722,7 +710,6 @@ class HomeController extends ChangeNotifier {
           );
         }
       }
-      subnets = parseSubnets();
 
       if (gateway.isEmpty || iface.isEmpty) {
         try {
@@ -780,13 +767,23 @@ class HomeController extends ChangeNotifier {
         await diagnoseBestServerPreset(updateGuidance: false);
       }
 
-      List<String>? safeSubnets;
-      if (subnets.isNotEmpty) {
+      final rawHost = rdpHostCtrl.text.trim();
+      final resolvedPort = parsePort();
+
+      List<String>? routeSubnets;
+      if (_supportsRouteChanges &&
+          safeGateway != null &&
+          safeIface != null &&
+          rawHost.isNotEmpty) {
         try {
-          safeSubnets = InputSanitizer.sanitizeSubnets(
-            subnets,
-            fieldName: l10n.hospitalSubnets,
-          );
+          final autoCidrs = await workflowService.hostCidrResolver(rawHost);
+          if (autoCidrs.isNotEmpty) {
+            routeSubnets = InputSanitizer.sanitizeSubnets(
+              autoCidrs,
+              fieldName: l10n.hospitalSubnets,
+              allowEmpty: true,
+            );
+          }
         } on ArgumentError catch (e) {
           log(
             l10n.logInvalidConfiguration(l10n.hospitalSubnets, '$e'),
@@ -795,11 +792,10 @@ class HomeController extends ChangeNotifier {
           findings.add(
             l10n.findingInvalidConfiguration(l10n.hospitalSubnets),
           );
+        } catch (_) {
+          // Sin resolución DNS no se pueden verificar rutas automáticas.
         }
       }
-
-      final rawHost = rdpHostCtrl.text.trim();
-      final resolvedPort = parsePort();
 
       final available = await rdpLauncher.isRdpClientAvailable();
       log(
@@ -811,11 +807,11 @@ class HomeController extends ChangeNotifier {
       }
 
       if (_supportsRouteChanges &&
-          safeSubnets != null &&
+          routeSubnets != null &&
           safeGateway != null &&
           safeIface != null) {
         final missingRoutes = await routeManager.verifyRoutes(
-          hospitalSubnets: safeSubnets,
+          hospitalSubnets: routeSubnets,
           gateway: safeGateway,
           interfaceName: safeIface,
         );
@@ -923,12 +919,6 @@ class HomeController extends ChangeNotifier {
 
   Future<void> connect() async {
     if (_busy) return;
-    final subnets = parseSubnets();
-
-    if (subnets.isEmpty && _requiresNetworkConfig) {
-      log(l10n.logInvalidNoSubnets, isError: true);
-      return;
-    }
 
     clearGuidance();
     _busy = true;
@@ -1016,7 +1006,6 @@ class HomeController extends ChangeNotifier {
       }
 
       await for (final state in workflowService.connect(
-        subnets: subnets,
         host: host,
         user: user,
         domain: domain,
@@ -1147,7 +1136,6 @@ class HomeController extends ChangeNotifier {
       }
       await s.clear();
 
-      subnetsCtrl.text = s.hospitalSubnetsAsText;
       gatewayCtrl.text = s.gateway;
       ifaceCtrl.text = s.interfaceName;
       rdpHostCtrl.text = s.rdpHost;
@@ -1176,7 +1164,6 @@ class HomeController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    subnetsCtrl.dispose();
     gatewayCtrl.dispose();
     ifaceCtrl.dispose();
     rdpHostCtrl.dispose();

@@ -168,20 +168,6 @@ class _NetworkDiagnosticsViewState extends State<NetworkDiagnosticsView> {
                   ),
                 ],
               ),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12.0),
-                child: TextField(
-                  controller: controller.subnetsCtrl,
-                  enabled: !controller.busy,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: l10n.hospitalSubnetsOnePerLine,
-                    hintText: l10n.hospitalSubnetsHint,
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
             ],
           ),
         ),

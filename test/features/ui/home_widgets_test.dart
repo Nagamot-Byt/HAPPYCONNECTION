@@ -70,8 +70,7 @@ void main() {
     when(() => mockSettingsStorage.init()).thenAnswer((_) async {});
     when(() => mockSettingsStorage.save()).thenAnswer((_) async {});
     when(() => mockSettingsStorage.clear()).thenAnswer((_) async {});
-    when(() => mockSettingsStorage.pendingSplitTunnelCleanup)
-        .thenReturn(null);
+    when(() => mockSettingsStorage.pendingSplitTunnelCleanup).thenReturn(null);
     when(() => mockSettingsStorage.setPendingSplitTunnelCleanup(
           subnets: any(named: 'subnets'),
           gateway: any(named: 'gateway'),
@@ -79,7 +78,6 @@ void main() {
         )).thenAnswer((_) async {});
     when(() => mockSettingsStorage.clearPendingSplitTunnelCleanup())
         .thenAnswer((_) async {});
-    when(() => mockSettingsStorage.hospitalSubnetsAsText).thenReturn('');
     when(() => mockSettingsStorage.gateway).thenReturn('');
     when(() => mockSettingsStorage.interfaceName).thenReturn('');
     when(() => mockSettingsStorage.rdpHost).thenReturn('');
@@ -167,8 +165,7 @@ void main() {
       );
 
   group('ConnectionLogsWidget', () {
-    testWidgets('shows the empty state and disables clearing',
-        (tester) async {
+    testWidgets('shows the empty state and disables clearing', (tester) async {
       await pumpPanel(tester, const ConnectionLogsWidget());
 
       expect(find.text('No hay actividad reciente.'), findsOneWidget);
@@ -242,8 +239,7 @@ void main() {
         (tester) async {
       await pumpPanel(tester, ConnectionActionButtons(controller: controller));
 
-      FilledButton buttonWithLabel(String label) =>
-          tester.widget<FilledButton>(
+      FilledButton buttonWithLabel(String label) => tester.widget<FilledButton>(
             find.ancestor(
               of: find.text(label),
               matching: find.bySubtype<FilledButton>(),
@@ -269,8 +265,7 @@ void main() {
       await initLoadedController();
       await pumpPanel(tester, ConnectionActionButtons(controller: controller));
 
-      FilledButton buttonWithLabel(String label) =>
-          tester.widget<FilledButton>(
+      FilledButton buttonWithLabel(String label) => tester.widget<FilledButton>(
             find.ancestor(
               of: find.text(label),
               matching: find.bySubtype<FilledButton>(),
@@ -295,7 +290,6 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       try {
         await initLoadedController();
-        controller.subnetsCtrl.text = '10.0.0.0/8';
         controller.rdpHostCtrl.text = '10.0.0.50';
         controller.gatewayCtrl.text = '192.168.1.1';
         controller.ifaceCtrl.text = 'wlan0';
@@ -312,10 +306,8 @@ void main() {
               wifiPassword: any(named: 'wifiPassword'),
               onSelectServer: any(named: 'onSelectServer'),
               onSplitTunnelEnabled: any(named: 'onSplitTunnelEnabled'),
-              onSplitTunnelRolledBack:
-                  any(named: 'onSplitTunnelRolledBack'),
-              onSplitTunnelUnavailable:
-                  any(named: 'onSplitTunnelUnavailable'),
+              onSplitTunnelRolledBack: any(named: 'onSplitTunnelRolledBack'),
+              onSplitTunnelUnavailable: any(named: 'onSplitTunnelUnavailable'),
             )).thenAnswer((_) async* {
           await Completer<void>().future;
         });
@@ -338,12 +330,10 @@ void main() {
       }
     });
 
-    testWidgets('enables disconnect once the tunnel is active',
-        (tester) async {
+    testWidgets('enables disconnect once the tunnel is active', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
       try {
         await initLoadedController();
-        controller.subnetsCtrl.text = '10.0.0.0/8';
         controller.rdpHostCtrl.text = '10.0.0.50';
         controller.gatewayCtrl.text = '192.168.1.1';
         controller.ifaceCtrl.text = 'wlan0';
@@ -360,10 +350,8 @@ void main() {
               wifiPassword: any(named: 'wifiPassword'),
               onSelectServer: any(named: 'onSelectServer'),
               onSplitTunnelEnabled: any(named: 'onSplitTunnelEnabled'),
-              onSplitTunnelRolledBack:
-                  any(named: 'onSplitTunnelRolledBack'),
-              onSplitTunnelUnavailable:
-                  any(named: 'onSplitTunnelUnavailable'),
+              onSplitTunnelRolledBack: any(named: 'onSplitTunnelRolledBack'),
+              onSplitTunnelUnavailable: any(named: 'onSplitTunnelUnavailable'),
             )).thenAnswer((invocation) {
           final onEnabled = invocation.namedArguments[#onSplitTunnelEnabled]
               as Future<void> Function(List<String>, String, String)?;
@@ -539,10 +527,6 @@ void main() {
 
         expect(find.text('Puerta de enlace (Gateway)'), findsOneWidget);
         expect(find.text('Interfaz de red'), findsOneWidget);
-        expect(
-          find.text('Subredes del hospital (una por línea)'),
-          findsOneWidget,
-        );
         expect(find.text('Detectar red actual'), findsOneWidget);
 
         await tester.tap(find.text('Detectar red actual'));

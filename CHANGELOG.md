@@ -29,6 +29,11 @@ Todas las versiones relevantes de MedLink Connect.
 
 ### Cambiado
 
+- Túnel dividido sin configuración manual: se eliminó el campo «Subredes del
+  hospital». Ahora la app resuelve el servidor RDP (preset o IP) y crea rutas
+  `/32` automáticas vía el gateway hospitalario; si la resolución falla,
+  continúa sin túnel. La verificación de rutas del solucionador también usa
+  esas rutas automáticas.
 - ARQ-01: el estado y la lógica Wi-Fi de `HomeController` se extrajeron a
   `WifiConnectionCoordinator` (escaneo de SSIDs, conexión actual, confirmación
   del SSID objetivo y resolución de la selección) y la selección de presets de

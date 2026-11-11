@@ -75,11 +75,6 @@ class SettingsStorage {
   String get interfaceName => prefs.getString('interfaceName') ?? '';
   set interfaceName(String value) => prefs.setString('interfaceName', value);
 
-  String get hospitalSubnetsAsText =>
-      prefs.getString('hospitalSubnetsAsText') ?? '';
-  set hospitalSubnetsAsText(String value) =>
-      prefs.setString('hospitalSubnetsAsText', value);
-
   String get rdpHost => prefs.getString('rdpHost') ?? '';
   set rdpHost(String value) => prefs.setString('rdpHost', value);
 
